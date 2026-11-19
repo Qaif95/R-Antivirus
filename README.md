@@ -1,6 +1,6 @@
 # 🛡️ R Antivirus
 
-<img width="511" height="400" alt="Ricon" src="https://github.com/user-attachments/assets/b7fd9e12-32ef-47e1-9c1b-def033241293" />
+<img width="768" height="768" alt="download (1)" src="https://github.com/user-attachments/assets/0edf859f-d439-4c81-9262-d4394b4faf38" />
 
 ### Lightweight Desktop Antivirus Application Built with Python
 
