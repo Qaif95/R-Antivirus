@@ -161,8 +161,6 @@ Make sure the ClamAV scanning engine and its definitions are available before us
 
 Configure your VirusTotal API key if the online reputation functionality requires one.
 
-**Important:** Never publish API keys, passwords, or other private credentials in your GitHub repository.
-
 ### 6. Run R Antivirus
 
 ```bash
