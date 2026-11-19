@@ -1,5 +1,7 @@
 # 🛡️ R Antivirus
 
+<img width="511" height="400" alt="Ricon" src="https://github.com/user-attachments/assets/b7fd9e12-32ef-47e1-9c1b-def033241293" />
+
 ### Lightweight Desktop Antivirus Application Built with Python
 
 **R Antivirus** is a Windows desktop antivirus application developed using Python and PySide6. It combines local malware scanning through ClamAV with VirusTotal integration, providing tools for threat detection, quarantine management, scan reporting, and system security operations.
