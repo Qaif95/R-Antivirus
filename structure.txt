@@ -1,0 +1,14 @@
+R Antivirus/
+├── R_antivirus.py
+└── data/
+    ├── Common/
+    │   └── about.py
+    ├── Interface/
+    │   └── interface.py
+    ├── Operations/
+    │   ├── clamavnet_engine.py
+        │   └── boot_scanner.py
+        ├── Quarantine/
+    ├── Reports/
+    └── Resources/
+        └── Ricon.png
