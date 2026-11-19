@@ -173,15 +173,8 @@ The application may request administrator privileges for certain system operatio
 
 ## 🖼️ Screenshots
 
-Screenshots of the application will be added here.
-
-<!-- Add your application screenshots below.
-
-![R Antivirus Main Interface](screenshots/main-interface.png)
-
-![R Antivirus Scanning](screenshots/scanning.png)
-
-![R Antivirus Quarantine](screenshots/quarantine.png)
+<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/df700027-64a2-4112-b667-64638e88d89d" />
+<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/ab44bd26-8028-4b07-b1a5-c47ead22f7c7" />
 
 -->
 
@@ -243,7 +236,8 @@ If you encounter an issue or have an idea for improving R Antivirus:
 
 No open-source license has been selected for this project yet.
 
-Until a license is added, the project remains subject to the default copyright rules. Please do not assume that public availability means permission to reuse, modify, or redistribute the code.
+Until a license is added, the project remains subject to the default copyright rules. 
+Please do not assume that public availability means permission to reuse, modify, or redistribute the code.
 
 ---
 
