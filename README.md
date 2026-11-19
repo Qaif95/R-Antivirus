@@ -64,7 +64,7 @@ R-Antivirus/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/USERNAME/R-Antivirus.git
+git clone https://github.com/Qaif95/R-Antivirus.git
 ```
 
 ### 2. Navigate to the project directory
