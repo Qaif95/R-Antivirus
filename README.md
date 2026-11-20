@@ -1,6 +1,7 @@
 # 🛡️ R Antivirus
 
 **R Antivirus** is a modern Windows desktop antivirus and security control panel built with **Python (PySide6)**, powered by the local **ClamAV** scanning engine and **VirusTotal** cloud SHA-256 hash verification.
+<img width="511" height="400" alt="Ricon" src="https://github.com/user-attachments/assets/cd981ca5-203f-4d89-afd0-9e57f7600d34" />
 
 ---
 
