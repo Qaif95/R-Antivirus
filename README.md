@@ -1,260 +1,89 @@
 # 🛡️ R Antivirus
 
-<img width="768" height="768" alt="download (1)" src="https://github.com/user-attachments/assets/0edf859f-d439-4c81-9262-d4394b4faf38" />
-
-### Lightweight Desktop Antivirus Application Built with Python
-
-**R Antivirus** is a Windows desktop antivirus application developed using Python and PySide6. It combines local malware scanning through ClamAV with VirusTotal integration, providing tools for threat detection, quarantine management, scan reporting, and system security operations.
-
-The project focuses on building a practical, user-friendly antivirus application with a modular architecture and an easy-to-use graphical interface.
-
-<p align="center">
-  <strong>Protect • Detect • Manage</strong>
-</p>
+**R Antivirus** is a modern Windows desktop antivirus and security control panel built with **Python (PySide6)**, powered by the local **ClamAV** scanning engine and **VirusTotal** cloud SHA-256 hash verification.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-### 🔍 Malware Scanning
-- Local malware scanning powered by ClamAV.
-- Support for scanning files and directories.
-- Recursive scanning options.
-- Archive scanning support.
-- Scan progress monitoring.
-- Ability to stop active scanning operations.
-
-### 🌐 VirusTotal Integration
-- Integration with the VirusTotal service.
-- File reputation checking.
-- Additional threat intelligence through online analysis.
-
-### 🔒 Quarantine Management
-- Quarantine management functionality.
-- Restore quarantined files.
-- Delete quarantined files.
-- Manage detected threats.
-
-### 📊 Scan Reports
-- Scan report storage.
-- CSV report support.
-- Organized report directory.
-
-### ⏰ Scheduled Scanning
-- Scan scheduling interface.
-- Configurable scan frequency.
-- Custom scan targets.
-- Schedule configuration storage.
-
-### ⚙️ Customization
-- Customizable application theme.
-- Right-to-left (RTL) and left-to-right (LTR) interface support.
-- Application settings management.
-
-### 🖥️ System Operations
-- Administrator privilege support.
-- Boot-scanning component.
-- Full-system scanning functionality.
+* **Dual-Engine Malware Detection**
+  * **Local ClamAV Scanning:** Recursive folder and single-file scanning with deep archive inspection, infected-only filtering, and configurable file/scan size limits.
+  * **VirusTotal Cloud Verification:** Instant SHA-256 hash lookups against VirusTotal's v3 API without uploading private files automatically.
+* **Real-Time Shield (Multi-Folder Watch)**
+  * Monitors configured directories (such as `Downloads`) in real time using Windows file-system events and automatically isolates threats.
+* **Advanced System Scanners**
+  * **Full Disk Scan:** Automatically enumerates and scans all available local drives.
+  * **Active Memory Process Scanner:** Inspects currently running executables in memory.
+  * **Startup & Boot-Time Protection:** Scans Windows startup registry keys/folders and schedules pre-session boot scans.
+* **Quarantine Vault & Exclusions**
+  * Safely isolates detected threats as `.quarantine` files alongside a `manifest.json` metadata tracker.
+  * Supports **Restore**, **Trust & Exclude**, **SHA-256 Copy**, **Item Details**, and **Permanent Delete**.
+* **Security Audit Reports & Persistent Incident History**
+  * Tracks scan statistics and threat events across sessions (`incidents_state.json`) and exports formatted **HTML** or **CSV** security reports.
+* **Modern Desktop UI**
+  * Frameless custom title bar, **Light / Dark** themes, **English / Arabic (RTL)** localization, real-time CPU/RAM/GPU telemetry, live security console, and system tray integration.
 
 ---
 
-## 🧪 Testing Status
-
-The core functionality of R Antivirus has been tested on the developer's Windows machine.
-
-Tested operations include:
-
-- Local malware scanning.
-- VirusTotal file reputation checks.
-- Quarantine operations.
-- File restoration.
-- Scan reporting.
-- Application interface and controls.
-
-Testing and development are ongoing. Results may vary depending on the Windows environment, ClamAV configuration, permissions, and external service availability.
-
----
-
-## 🛠️ Built With
-
-| Technology | Purpose |
-|---|---|
-| Python | Core application development |
-| PySide6 | Desktop graphical interface |
-| ClamAV | Local malware detection |
-| VirusTotal API | Online file reputation analysis |
-| CSV | Scan report storage |
-
----
-
-## 📁 Project Structure
+## 🏗️ Project Structure
 
 ```text
 R-Antivirus/
-│
-├── R_antivirus.py
-│
-└── data/
-    │
-    ├── Common/
-    │   ├── about.py
-    │   └── bridge.py
-    │
-    ├── Interface/
-    │   └── interface.py
-    │
-    ├── Operations/
-    │   ├── boot_scanner.py
-    │   └── clamavnet_engine.py
-    │
-    ├── Quarantine/
-    │
-    ├── Reports/
-    │
-    ├── Resources/
-    │   ├── Ricon.png
-    │   └── icons/
-    │
-    └── Restored/
+├── R_antivirus.py          # Main application entry point & signal bridge
+├── interface.py            # PySide6 GUI, themes, RTL support, and dialogs
+├── clamavnet_engine.py     # Core scanning engine, quarantine, shield & VT client
+├── boot_scanner.py         # Windows boot-time scan scheduler
+├── about.py                # About page & project metadata
+└── Resources/
+    └── Ricon.png           # Application & system tray icon
 ```
 
 ---
 
-## ⚙️ Requirements
+## ⚙️ Prerequisites
 
-- Windows 10 or Windows 11.
-- Python 3.10 or newer.
-- PySide6.
-- ClamAV installed and configured.
-- Internet connection for VirusTotal functionality.
-- VirusTotal API key, if required by your configuration.
-
----
-
-## 📥 Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Qaif95/R-Antivirus.git
-```
-
-### 2. Navigate to the project directory
-
-```bash
-cd R-Antivirus
-```
-
-### 3. Install Python dependencies
-
-```bash
-pip install PySide6
-```
-
-Install any additional dependencies required by the application.
-
-### 4. Configure ClamAV
-
-Install ClamAV and configure its executable paths and signature database.
-
-Make sure the ClamAV scanning engine and its definitions are available before using local scanning features.
-
-### 5. Configure VirusTotal
-
-Configure your VirusTotal API key if the online reputation functionality requires one.
-
-### 6. Run R Antivirus
-
-```bash
-python R_antivirus.py
-```
-
-The application may request administrator privileges for certain system operations.
+1. **Operating System:** Windows 10 / 11 (Administrator privileges recommended for full system, memory, and boot-time scans).
+2. **Python:** Python 3.10 or newer.
+3. **ClamAV for Windows:**
+   * Download and install ClamAV, and ensure `clamscan.exe` and `freshclam.exe` are accessible (either in `PATH`, `C:\Program Files\ClamAV`, or configured inside **Reports & Settings**).
+   * Run `freshclam` at least once to download initial virus signature databases.
+4. **Python Dependencies:**
+   ```bash
+   pip install PySide6 psutil
+   ```
 
 ---
 
-## 🖼️ Screenshots
+## 🚀 Getting Started
 
-<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/df700027-64a2-4112-b667-64638e88d89d" />
-<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/ab44bd26-8028-4b07-b1a5-c47ead22f7c7" />
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Qaif95/R-Antivirus.git
+   cd R-Antivirus
+   ```
 
--->
+2. **Install required packages:**
+   ```bash
+   pip install PySide6 psutil
+   ```
 
----
+3. **Run R Antivirus (as Administrator):**
+   ```bash
+   python R_antivirus.py
+   ```
 
-## 🗺️ Development Roadmap
-
-- [x] Initial desktop application.
-- [x] PySide6 graphical interface.
-- [x] ClamAV integration.
-- [x] VirusTotal integration.
-- [x] Quarantine management.
-- [x] Scan reporting.
-- [x] Theme customization.
-- [x] RTL/LTR interface support.
-- [ ] Complete and validate the new modular project structure.
-- [ ] Improve scheduled scanning reliability.
-- [ ] Expand automated testing.
-- [ ] Improve error handling and logging.
-- [ ] Optimize scanning performance.
-- [ ] Prepare a stable public release.
+4. **Configure Paths & API Key (Optional):**
+   * Open **Reports & Settings** inside the app to verify your `clamscan` and `freshclam` paths, add your **VirusTotal API Key**, and adjust max file/scan size thresholds.
 
 ---
 
-## 🔐 Security Notice
+## ⚠️ Disclaimer
 
-R Antivirus is an independent software development project.
-
-Although its core features have been tested on the developer's machine, it has not been independently audited or certified as a commercial antivirus solution.
-
-Please keep the following points in mind:
-
-- Do not use R Antivirus as your only layer of system protection.
-- Keep ClamAV and its malware definitions updated.
-- Be careful when quarantining or deleting files.
-- Maintain backups of important data.
-- Use caution when testing malware samples.
-- Protect your VirusTotal API credentials.
-- Do not assume that any antivirus engine can detect every threat.
-
-R Antivirus is not affiliated with or officially endorsed by ClamAV or VirusTotal.
+This project is provided for educational and personal security utility purposes. Always verify detections before deleting files permanently—use the **Quarantine Vault** and **Trust & Exclude** workflow if a legitimate application triggers a false positive.
 
 ---
 
-## 🤝 Contributing
+## 👤 Author
 
-Contributions, suggestions, and bug reports are welcome.
-
-If you encounter an issue or have an idea for improving R Antivirus:
-
-1. Open the repository's Issues section.
-2. Describe the problem or suggestion.
-3. Include relevant error messages and system information.
-4. Submit a pull request if you would like to contribute code.
-
----
-
-## 📜 License
-
-No open-source license has been selected for this project yet.
-
-Until a license is added, the project remains subject to the default copyright rules. 
-Please do not assume that public availability means permission to reuse, modify, or redistribute the code.
-
----
-
-## 👨‍💻 Developer
-
-**Qaif95**
-
-GitHub: [@Qaif95](https://github.com/Qaif95)
-
-Project: [R Antivirus](https://github.com/Qaif95/R-Antivirus)
-
----
-
-<p align="center">
-  <strong>R Antivirus</strong>
-  <br>
-  Building a safer digital environment, one step at a time. 🛡️
-</p>
+* **Developer:** Shafe'
+* **GitHub:** [@Qaif95](https://github.com/Qaif95)
