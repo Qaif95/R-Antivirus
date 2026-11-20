@@ -1,4 +1,3 @@
-# C:\R Antivirus\R_antivirus.py
 import os
 import sys
 import ctypes
@@ -81,13 +80,13 @@ class AppController:
         self.win.quarantine_action.connect(self._handle_quarantine)
 
     def _on_theme_changed(self, theme):
-        if "ui" not in self.engine.config:
+        if "ui" not in self.engine.config or not isinstance(self.engine.config["ui"], dict):
             self.engine.config["ui"] = {}
         self.engine.config["ui"]["theme"] = theme
         self.engine.save_config()
 
     def _on_rtl_changed(self, rtl):
-        if "ui" not in self.engine.config:
+        if "ui" not in self.engine.config or not isinstance(self.engine.config["ui"], dict):
             self.engine.config["ui"] = {}
         self.engine.config["ui"]["rtl"] = rtl
         self.engine.save_config()
@@ -108,7 +107,7 @@ class AppController:
         else:
             self.engine.check_virustotal(
                 target,
-                on_result=lambda ok, info: self.bridge.scan_finished_signal.emit(f"VirusTotal: {info}")
+                on_result=lambda ok, info: self.bridge.scan_result_signal.emit(f"VirusTotal: {info}", bool(ok))
             )
 
     def _start_full_disk_scan(self):
@@ -116,12 +115,20 @@ class AppController:
             auto_quarantine=False,
             archive=True,
             progress_callback=lambda p, c, t: self.bridge.progress_signal.emit(p, c, t),
-            on_complete=lambda n, th: self.bridge.scan_finished_signal.emit(f"Full scan: {n} drives, {th} threats")
+            on_complete=lambda n, th: self.bridge.scan_result_signal.emit(f"Full scan: {n} drives, {th} threats", True)
         )
         self.win.start_scan_polling()
 
     def _save_settings(self, config_data):
-        self.engine.config.update(config_data)
+        for k, v in (config_data or {}).items():
+            if k == "ui" and isinstance(v, dict):
+                existing_ui = self.engine.config.get("ui")
+                if not isinstance(existing_ui, dict):
+                    existing_ui = {}
+                existing_ui.update(v)
+                self.engine.config["ui"] = existing_ui
+            else:
+                self.engine.config[k] = v
         self.engine.save_config()
         self.bridge.popup_signal.emit("Success", "Settings saved successfully.")
 
@@ -131,7 +138,10 @@ class AppController:
         self.bridge.popup_signal.emit("Success", "Schedule saved.")
 
     def _refresh_exclusions(self):
-        self.win.refresh_exclusions(self.engine.config.get("exclusions", []))
+        exclusions = self.engine.config.get("exclusions", [])
+        for exc in exclusions:
+            self.engine.clear_threat_for_target(exc)
+        self.win.refresh_exclusions(exclusions)
 
     def _handle_quarantine(self, action, filename):
         if action == "restore":
@@ -140,6 +150,8 @@ class AppController:
             fpath = os.path.join(self.engine.quarantine_dir, filename)
             if os.path.isfile(fpath):
                 os.remove(fpath)
+            self.engine.remove_quarantine_entry(filename)
+            self.engine.clear_threat_for_target(filename)
         self.win.refresh_quarantine()
 
 
