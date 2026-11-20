@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-tools/boot_scanner.py
+data/Operations/boot_scanner.py
 Boot-Time / Startup Scan module for R antivirus
 """
 
@@ -23,12 +22,29 @@ class BootScanner:
             return si
         return None
 
+    @staticmethod
+    def _ps_single_quote(value: str) -> str:
+        return str(value).replace("'", "''")
+
+    @staticmethod
+    def _format_task_target_arg(target_path: str) -> str:
+        cleaned = os.path.normpath(str(target_path).strip())
+        if len(cleaned) == 2 and cleaned[1] == ":":
+            cleaned = cleaned + "\\"
+        elif len(cleaned) > 3 and cleaned.endswith("\\"):
+            cleaned = cleaned.rstrip("\\")
+        escaped_dq = cleaned.replace('"', '""')
+        return f'-r --infected --no-warnings "{escaped_dq}"'
+
     def is_boot_scan_scheduled(self):
         """Checks whether RAntiVirusBootScan is currently registered in Windows Task Scheduler."""
         if os.name != "nt":
             return False
         try:
-            ps_cmd = f"Get-ScheduledTask -TaskName '{self.TASK_NAME}' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty TaskName"
+            ps_cmd = (
+                f"Get-ScheduledTask -TaskName '{self._ps_single_quote(self.TASK_NAME)}' "
+                f"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty TaskName"
+            )
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
                 startupinfo=self._hidden_startupinfo(),
@@ -43,21 +59,25 @@ class BootScanner:
             return False
 
     def schedule_boot_scan(self, target_path="C:\\"):
-        if not os.path.exists(self.clamscan_path):
-            self.log(f"[BOOT SCAN ERROR] ClamAV executable not found at: {self.clamscan_path}", "threat")
+        exe_path = str(self.clamscan_path or "").strip()
+        if not exe_path or not os.path.isfile(exe_path):
+            self.log(f"[BOOT SCAN ERROR] ClamAV executable not found at: {exe_path}", "threat")
             return False
 
         try:
-            clean_target = target_path.rstrip("\\/") + "\\" if len(target_path) <= 3 else target_path
-            self.log(f"[BOOT SCAN] Configuring startup scan task for target: {clean_target}", "shield")
-            escaped_exe = self.clamscan_path.replace("'", "''")
-            escaped_target = clean_target.replace("'", "''")
+            safe_target = target_path.strip() if target_path and target_path.strip() else "C:\\"
+            arg_str = self._format_task_target_arg(safe_target)
+            self.log(f"[BOOT SCAN] Configuring startup scan task for target: {safe_target}", "shield")
+
+            escaped_exe = self._ps_single_quote(exe_path)
+            escaped_args = self._ps_single_quote(arg_str)
+            escaped_task = self._ps_single_quote(self.TASK_NAME)
 
             ps_cmd = f"""
-            $Action = New-ScheduledTaskAction -Execute '{escaped_exe}' -Argument '-r --infected --no-warnings "{escaped_target}"'
+            $Action = New-ScheduledTaskAction -Execute '{escaped_exe}' -Argument '{escaped_args}'
             $Trigger = New-ScheduledTaskTrigger -AtStartup
             $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 4)
-            Register-ScheduledTask -TaskName '{self.TASK_NAME}' -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
+            Register-ScheduledTask -TaskName '{escaped_task}' -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
             """
             subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
@@ -77,7 +97,8 @@ class BootScanner:
 
     def remove_boot_scan(self):
         try:
-            ps_cmd = f"Unregister-ScheduledTask -TaskName '{self.TASK_NAME}' -Confirm:$false -ErrorAction SilentlyContinue"
+            escaped_task = self._ps_single_quote(self.TASK_NAME)
+            ps_cmd = f"Unregister-ScheduledTask -TaskName '{escaped_task}' -Confirm:$false -ErrorAction SilentlyContinue"
             subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
                 startupinfo=self._hidden_startupinfo(),
