@@ -1,5 +1,5 @@
-# C:\R Antivirus\data\Common\bridge.py
 from PySide6.QtCore import QObject, Signal
+
 
 class EngineBridge(QObject):
     log_signal = Signal(str, str)
@@ -8,3 +8,4 @@ class EngineBridge(QObject):
     progress_signal = Signal(int, int, int)
     popup_signal = Signal(str, str)
     scan_finished_signal = Signal(str)
+    scan_result_signal = Signal(str, bool)
