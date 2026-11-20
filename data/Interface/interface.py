@@ -1,6 +1,6 @@
-# C:\R Antivirus\data\Interface\interface.py
 import os
 import json
+import time
 from datetime import datetime
 
 try:
@@ -52,7 +52,8 @@ TRANS = {
         "whitelisted": "<b>Whitelisted Folders & Files</b>", "search_excl": "Search exclusions...", "no_excl": "No exclusions yet",
         "excl_folder": "➕ Exclude Folder", "excl_file": "➕ Exclude File", "rem_selected": "➖ Remove Selected",
         "quar_vault": "<b>Quarantine Vault</b>", "search_quar": "Search quarantined files...", "quar_empty": "Quarantine is empty",
-        "refresh": "🔄 Refresh", "restore": "♻️ Restore", "sha256": "🔑 SHA-256", "delete": "🗑️ Delete",
+        "refresh": "🔄 Refresh", "restore": "♻️ Restore", "trust_exclude": "🛡️ Trust & Exclude", "sha256": "🔑 SHA-256", "details": "ℹ️ Details", "delete": "🗑️ Delete",
+        "recent_incidents": "📋 Recent Incidents",
         "export_html": "📄 Export HTML Report", "export_csv": "📊 Export CSV Report", "export_set": "⬇️ Export Settings", "import_set": "⬆️ Import Settings",
         "clam_path": "clamscan Path:", "fresh_path": "freshclam Path:", "vt_key": "VirusTotal API Key:",
         "max_fs": "Max File Size:", "max_ss": "Max Scan Size:", "enable_sounds": "Enable notification sounds", "save_set": "💾 Save Settings",
@@ -61,7 +62,11 @@ TRANS = {
         "boot_sched": "Boot Scan: SCHEDULED", "boot_disabled": "Boot Scan: Disabled",
         "sys_telemetry": "System Telemetry", "scanned_files": "Scanned Files:", "threats_blocked": "Threats Blocked:", "defs": "Definitions:",
         "live_console": "Live Security Console", "clear_log": "Clear Log", "toggle_log": "Show / Hide Log",
-        "engine_ready": "🟢 Engine Ready", "shield_active": "🟢 Shield Active", "shield_off_stat": "🟡 Shield Off"
+        "engine_ready": "🟢 Engine Ready", "shield_active": "🟢 Shield Active", "shield_off_stat": "🟡 Shield Off",
+        "enable_sched": "Enable Scheduled Scan", "cancel": "Cancel", "confirm": "Confirm",
+        "exit_title": "Exit R Antivirus?", "exit_msg": "Are you sure you want to exit?", "exit_ok": "Exit",
+        "del_quar_title": "Delete Quarantined File?", "del_quar_ok": "Delete",
+        "del_quar_msg": "Permanently delete '{name}' from Quarantine? This cannot be undone."
     },
     "ar": {
         "nav": ["نظرة عامة", "خيارات الفحص", "بدء التشغيل", "الذاكرة والجدولة", "الاستثناءات", "الحجر الصحي", "التقارير والإعدادات", "حول"],
@@ -85,7 +90,8 @@ TRANS = {
         "whitelisted": "<b>المجلدات والملفات المستثناة</b>", "search_excl": "ابحث في الاستثناءات...", "no_excl": "لا توجد استثناءات بعد",
         "excl_folder": "➕ استبعاد مجلد", "excl_file": "➕ استبعاد ملف", "rem_selected": "➖ إزالة المحدد",
         "quar_vault": "<b>خزنة الحجر الصحي</b>", "search_quar": "ابحث في الملفات المحجورة...", "quar_empty": "الحجر الصحي فارغ",
-        "refresh": "🔄 تحديث", "restore": "♻️ استعادة", "sha256": "🔑 SHA-256", "delete": "🗑️ حذف",
+        "refresh": "🔄 تحديث", "restore": "♻️ استعادة", "trust_exclude": "🛡️ وثوق واستثناء", "sha256": "🔑 SHA-256", "details": "ℹ️ التفاصيل", "delete": "🗑️ حذف",
+        "recent_incidents": "📋 سجل الحوادث الأخيرة",
         "export_html": "📄 تصدير تقرير HTML", "export_csv": "📊 تصدير تقرير CSV", "export_set": "⬇️ تصدير الإعدادات", "import_set": "⬆️ استيراد الإعدادات",
         "clam_path": "مسار clamscan:", "fresh_path": "مسار freshclam:", "vt_key": "مفتاح VirusTotal API:",
         "max_fs": "أقصى حجم للملف:", "max_ss": "أقصى حجم للفحص:", "enable_sounds": "تفعيل أصوات الإشعارات", "save_set": "💾 حفظ الإعدادات",
@@ -94,34 +100,29 @@ TRANS = {
         "boot_sched": "فحص الإقلاع: مجدول", "boot_disabled": "فحص الإقلاع: معطل",
         "sys_telemetry": "قياسات النظام", "scanned_files": "الملفات المفحوصة:", "threats_blocked": "التهديدات المحجوبة:", "defs": "التعريفات:",
         "live_console": "سجل الأمان المباشر", "clear_log": "مسح السجل", "toggle_log": "إظهار / إخفاء السجل",
-        "engine_ready": "🟢 المحرك جاهز", "shield_active": "🟢 الدرع نشط", "shield_off_stat": "🟡 الدرع مغلق"
+        "engine_ready": "🟢 المحرك جاهز", "shield_active": "🟢 الدرع نشط", "shield_off_stat": "🟡 الدرع مغلق",
+        "enable_sched": "تفعيل الفحص المجدول", "cancel": "إلغاء", "confirm": "تأكيد",
+        "exit_title": "الخروج من R Antivirus؟", "exit_msg": "هل أنت متأكد أنك تريد الخروج؟", "exit_ok": "خروج",
+        "del_quar_title": "حذف الملف المحجور؟", "del_quar_ok": "حذف نهائي",
+        "del_quar_msg": "هل تريد حذف الملف '{name}' نهائياً من الحجر الصحي؟ لا يمكن التراجع عن هذا الإجراء."
     }
 }
 
 # ═══════════════════════════════════════════════════════════════════════
-#  THEME QSS (SMOOTH ROUNDED CARDS & VIBRANT PURPLE IDENTITY)
+#  THEME QSS (FLAT SHARP WINDOW EDGES — NO OUTER CURVES)
 # ═══════════════════════════════════════════════════════════════════════
 LIGHT_QSS = """
-QMainWindow { background: transparent; }
-QWidget#RootContainer { background: transparent; }
+QMainWindow { background-color: #ffffff; }
+QWidget#RootContainer { background-color: #ffffff; }
 QFrame#WindowShell {
     background-color: #ffffff;
-    border-radius: 22px;
-    border: 1px solid #e6dbf7;
-}
-QFrame#WindowShell[maximized="true"] {
     border-radius: 0px;
-    border: none;
+    border: 1px solid #e6dbf7;
 }
 QFrame#CustomTitleBar {
     background-color: #faf7ff;
-    border-top-left-radius: 22px;
-    border-top-right-radius: 22px;
+    border-radius: 0px;
     border-bottom: 1px solid #ece4f8;
-}
-QFrame#WindowShell[maximized="true"] QFrame#CustomTitleBar {
-    border-top-left-radius: 0px;
-    border-top-right-radius: 0px;
 }
 QLabel { color: #2c1646; }
 QLabel#TitleBarText { font-size: 13px; font-weight: 700; }
@@ -135,25 +136,19 @@ QLabel#HeaderBadge {
     font-size: 10px;
     font-weight: 700;
 }
-QPushButton#TitleBtn { background: transparent; border: none; border-radius: 8px; color: #46355e; font-size: 13px; font-weight: 700; padding: 0px; }
+QPushButton#TitleBtn { background: transparent; border: none; border-radius: 0px; color: #46355e; font-size: 13px; font-weight: 700; padding: 0px; }
 QPushButton#TitleBtn:hover { background-color: #efe5fc; color: #6a1b9a; }
-QPushButton#TitleBtnClose { background: transparent; border: none; border-radius: 8px; color: #46355e; font-size: 13px; font-weight: 700; padding: 0px; }
+QPushButton#TitleBtnClose { background: transparent; border: none; border-radius: 0px; color: #46355e; font-size: 13px; font-weight: 700; padding: 0px; }
 QPushButton#TitleBtnClose:hover { background-color: #e81123; color: #ffffff; }
 QFrame#LeftSidebar {
     background-color: #faf7ff;
     border-right: 1px solid #ece4f8;
-    border-bottom-left-radius: 22px;
-}
-QFrame#WindowShell[maximized="true"] QFrame#LeftSidebar {
-    border-bottom-left-radius: 0px;
+    border-radius: 0px;
 }
 QFrame#RightPanel {
     background-color: #fbf9fe;
     border-left: 1px solid #ece4f8;
-    border-bottom-right-radius: 22px;
-}
-QFrame#WindowShell[maximized="true"] QFrame#RightPanel {
-    border-bottom-right-radius: 0px;
+    border-radius: 0px;
 }
 QFrame#SoftCard {
     background-color: #ffffff;
@@ -276,10 +271,12 @@ QScrollArea { border: none; background: transparent; }
 QCheckBox, QRadioButton { color: #46355e; font-size: 12px; }
 QCheckBox::indicator, QRadioButton::indicator { width: 16px; height: 16px; background-color: #ffffff; border: 1px solid #c4b5dc; border-radius: 4px; }
 QCheckBox::indicator:checked, QRadioButton::indicator:checked { background-color: #7b1fa2; border: 1px solid #7b1fa2; }
-QStatusBar { background-color: #faf7ff; color: #5e4b78; font-size: 11px; border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; }
-QFrame#WindowShell[maximized="true"] QStatusBar {
-    border-bottom-left-radius: 0px;
-    border-bottom-right-radius: 0px;
+QStatusBar {
+    background-color: #faf7ff;
+    color: #5e4b78;
+    font-size: 11px;
+    border-top: 1px solid #ece4f8;
+    border-radius: 0px;
 }
 QStatusBar::item { border: none; }
 QToolTip { background-color: #2c1646; color: #ffffff; padding: 5px 9px; border-radius: 6px; font-size: 11px; }
@@ -290,26 +287,17 @@ QDialog { background-color: #fbf9fe; }
 """
 
 DARK_QSS = """
-QMainWindow { background: transparent; }
-QWidget#RootContainer { background: transparent; }
+QMainWindow { background-color: #1e1630; }
+QWidget#RootContainer { background-color: #1e1630; }
 QFrame#WindowShell {
     background-color: #1e1630;
-    border-radius: 22px;
-    border: 1px solid #352554;
-}
-QFrame#WindowShell[maximized="true"] {
     border-radius: 0px;
-    border: none;
+    border: 1px solid #352554;
 }
 QFrame#CustomTitleBar {
     background-color: #1c1430;
-    border-top-left-radius: 22px;
-    border-top-right-radius: 22px;
+    border-radius: 0px;
     border-bottom: 1px solid #2e2247;
-}
-QFrame#WindowShell[maximized="true"] QFrame#CustomTitleBar {
-    border-top-left-radius: 0px;
-    border-top-right-radius: 0px;
 }
 QLabel { color: #e9d8ff; }
 QLabel#TitleBarText { font-size: 13px; font-weight: 700; }
@@ -323,25 +311,19 @@ QLabel#HeaderBadge {
     font-size: 10px;
     font-weight: 700;
 }
-QPushButton#TitleBtn { background: transparent; border: none; border-radius: 8px; color: #c9b8e6; font-size: 13px; font-weight: 700; padding: 0px; }
+QPushButton#TitleBtn { background: transparent; border: none; border-radius: 0px; color: #c9b8e6; font-size: 13px; font-weight: 700; padding: 0px; }
 QPushButton#TitleBtn:hover { background-color: #2e2247; color: #ffffff; }
-QPushButton#TitleBtnClose { background: transparent; border: none; border-radius: 8px; color: #c9b8e6; font-size: 13px; font-weight: 700; padding: 0px; }
+QPushButton#TitleBtnClose { background: transparent; border: none; border-radius: 0px; color: #c9b8e6; font-size: 13px; font-weight: 700; padding: 0px; }
 QPushButton#TitleBtnClose:hover { background-color: #e81123; color: #ffffff; }
 QFrame#LeftSidebar {
     background-color: #1c1430;
     border-right: 1px solid #2e2247;
-    border-bottom-left-radius: 22px;
-}
-QFrame#WindowShell[maximized="true"] QFrame#LeftSidebar {
-    border-bottom-left-radius: 0px;
+    border-radius: 0px;
 }
 QFrame#RightPanel {
     background-color: #1a1330;
     border-left: 1px solid #2e2247;
-    border-bottom-right-radius: 22px;
-}
-QFrame#WindowShell[maximized="true"] QFrame#RightPanel {
-    border-bottom-right-radius: 0px;
+    border-radius: 0px;
 }
 QFrame#SoftCard {
     background-color: #241a3d;
@@ -464,10 +446,12 @@ QScrollArea { border: none; background: transparent; }
 QCheckBox, QRadioButton { color: #c9b8e6; font-size: 12px; }
 QCheckBox::indicator, QRadioButton::indicator { width: 16px; height: 16px; background-color: #1c1430; border: 1px solid #4a3568; border-radius: 4px; }
 QCheckBox::indicator:checked, QRadioButton::indicator:checked { background-color: #b535f6; border: 1px solid #b535f6; }
-QStatusBar { background-color: #1a1330; color: #b9a4d8; font-size: 11px; border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; }
-QFrame#WindowShell[maximized="true"] QStatusBar {
-    border-bottom-left-radius: 0px;
-    border-bottom-right-radius: 0px;
+QStatusBar {
+    background-color: #1a1330;
+    color: #b9a4d8;
+    font-size: 11px;
+    border-top: 1px solid #2e2247;
+    border-radius: 0px;
 }
 QStatusBar::item { border: none; }
 QToolTip { background-color: #e9d8ff; color: #1a1025; padding: 5px 9px; border-radius: 6px; font-size: 11px; }
@@ -710,6 +694,7 @@ class CustomTitleBar(QFrame):
 
 
 class Toast(QFrame):
+    """Centered notification bubble near top of window."""
     def __init__(self, parent, message, kind="info", duration=3500):
         super().__init__(parent)
         self.setObjectName("Toast")
@@ -726,7 +711,7 @@ class Toast(QFrame):
             f"QLabel {{ color: {fg}; font-size: 12px; font-weight: 600; }}"
         )
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(12, 8, 12, 8)
+        lay.setContentsMargins(14, 9, 14, 9)
         lay.setSpacing(8)
         ico = QLabel(icon)
         ico.setStyleSheet("font-size: 16px;")
@@ -735,12 +720,89 @@ class Toast(QFrame):
         lay.addWidget(ico)
         lay.addWidget(lbl, 1)
         self.adjustSize()
-        self.setFixedWidth(340)
+        self.setFixedWidth(min(440, max(300, parent.width() - 100)))
         parent_rect = parent.rect()
-        self.move(max(10, parent_rect.width() - self.width() - 20), 56)
+        x_pos = max(10, (parent_rect.width() - self.width()) // 2)
+        self.move(x_pos, 56)
         self.show()
         self.raise_()
         QTimer.singleShot(duration, self.deleteLater)
+
+
+class TaskProgressBlock(QWidget):
+    """Real progress bar with elapsed/ETA time underneath and current task detail."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._start_ts = None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 4, 0, 0)
+        lay.setSpacing(4)
+
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 100)
+        self.bar.setValue(0)
+
+        meta_row = QHBoxLayout()
+        self.pct_lbl = QLabel("0%")
+        self.pct_lbl.setObjectName("MutedText")
+        self.time_lbl = QLabel("Elapsed: 00:00  |  ETA: --:--")
+        self.time_lbl.setObjectName("MutedText")
+        meta_row.addWidget(self.pct_lbl)
+        meta_row.addStretch()
+        meta_row.addWidget(self.time_lbl)
+
+        self.detail_lbl = QLabel("Idle")
+        self.detail_lbl.setObjectName("BodyText")
+        self.detail_lbl.setWordWrap(True)
+
+        lay.addWidget(self.bar)
+        lay.addLayout(meta_row)
+        lay.addWidget(self.detail_lbl)
+
+    def start_task(self, detail: str = "Starting task..."):
+        self._start_ts = time.monotonic()
+        self.bar.setValue(0)
+        self.pct_lbl.setText("0%")
+        self.time_lbl.setText("Elapsed: 00:00  |  ETA: calculating...")
+        self.detail_lbl.setText(detail)
+
+    @staticmethod
+    def _fmt_sec(sec: float | None) -> str:
+        if sec is None or sec < 0 or sec == float("inf"):
+            return "--:--"
+        s = int(sec)
+        mins, rem = divmod(s, 60)
+        hrs, mins = divmod(mins, 60)
+        return f"{hrs:02d}:{mins:02d}:{rem:02d}" if hrs else f"{mins:02d}:{rem:02d}"
+
+    def compute_eta_text(self, pct: int) -> str:
+        if self._start_ts is None or pct <= 0:
+            return "--:--"
+        if pct >= 100:
+            return "00:00"
+        elapsed = time.monotonic() - self._start_ts
+        return self._fmt_sec(elapsed * (100 - pct) / pct)
+
+    def update_progress(self, pct: int, current: int = 0, total: int = 0, detail: str | None = None):
+        if self._start_ts is None:
+            self._start_ts = time.monotonic()
+        pct = max(0, min(100, int(pct)))
+        self.bar.setValue(pct)
+        self.pct_lbl.setText(f"{pct}% ({current}/{total})" if total > 0 else f"{pct}%")
+
+        elapsed = time.monotonic() - self._start_ts
+        eta_text = self.compute_eta_text(pct)
+        self.time_lbl.setText(f"Elapsed: {self._fmt_sec(elapsed)}  |  ETA: {eta_text}")
+
+        if detail is not None:
+            self.detail_lbl.setText(detail)
+
+    def finish_task(self, detail: str = "Completed", success: bool = True):
+        elapsed = (time.monotonic() - self._start_ts) if self._start_ts else 0.0
+        if success:
+            self.bar.setValue(100)
+        self.time_lbl.setText(f"Elapsed: {self._fmt_sec(elapsed)}  |  Done")
+        self.detail_lbl.setText(detail)
 
 
 class EmptyState(QWidget):
@@ -765,6 +827,7 @@ class EmptyState(QWidget):
 
 
 class ScanButton(QPushButton):
+    """Animated scan button: use set_text(...) for label text, never setText(...)."""
     def __init__(self, text="Scan Now"):
         super().__init__(text)
         self.setObjectName("PrimaryScanBtn")
@@ -780,7 +843,7 @@ class ScanButton(QPushButton):
     def set_text(self, text: str):
         self._orig_text = text
         if not self._busy:
-            self.setText(text)
+            super().setText(text)
 
     def set_busy(self, busy: bool, label: str = "Scanning"):
         self._busy = busy
@@ -789,15 +852,15 @@ class ScanButton(QPushButton):
             self._timer.start(80)
         else:
             self._timer.stop()
-            self.setText(self._orig_text)
+            super().setText(self._orig_text)
 
     def _tick(self):
         self._spin_idx = (self._spin_idx + 1) % len(self._spinner_frames)
-        self.setText(f"{self._spinner_frames[self._spin_idx]}  {self._label}...")
+        super().setText(f"{self._spinner_frames[self._spin_idx]}  {self._label}...")
 
 
 class ConfirmDialog(QDialog):
-    def __init__(self, parent, title, message, confirm_text="Confirm", danger=False):
+    def __init__(self, parent, title, message, confirm_text="Confirm", cancel_text="Cancel", danger=False):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -820,7 +883,7 @@ class ConfirmDialog(QDialog):
         lay.addWidget(msg)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel = QPushButton("Cancel")
+        cancel = QPushButton(cancel_text)
         cancel.setObjectName("ActionBtn")
         cancel.clicked.connect(self.reject)
         ok = QPushButton(confirm_text)
@@ -902,7 +965,6 @@ class RAntivirusWindow(QMainWindow):
         self.setMinimumSize(1020, 700)
         self.setAcceptDrops(True)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
 
         data_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.icon_path = os.path.join(data_dir, "Resources", "Ricon.png")
@@ -919,6 +981,7 @@ class RAntivirusWindow(QMainWindow):
         self._toast_stack = []
         self._scan_poll = None
         self._scan_busy = False
+        self._scan_completed_notified = False
         self._last_sched_run_minute = ""
         self._tray_alert_state = None
 
@@ -929,7 +992,9 @@ class RAntivirusWindow(QMainWindow):
 
         self.bridge.log_signal.connect(self._append_log)
         self.bridge.progress_signal.connect(self._update_progress_ui)
-        self.bridge.scan_finished_signal.connect(self._on_scan_finished)
+        self.bridge.scan_finished_signal.connect(lambda msg: self._on_scan_finished(msg, True))
+        if hasattr(self.bridge, "scan_result_signal"):
+            self.bridge.scan_result_signal.connect(self._on_scan_finished)
         self.bridge.popup_signal.connect(lambda t, m: self._toast(f"{t}: {m}", "success"))
         self.bridge.notify_signal.connect(self._on_engine_notify)
         self.bridge.threat_signal.connect(self._on_threat_detected)
@@ -947,21 +1012,12 @@ class RAntivirusWindow(QMainWindow):
         if event.type() == QEvent.WindowStateChange:
             self._sync_maximized_state()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_toasts()
+
     def _sync_maximized_state(self):
-        is_max = self.isMaximized()
-        if hasattr(self, "_root_lay"):
-            pad = 0 if is_max else 6
-            self._root_lay.setContentsMargins(pad, pad, pad, pad)
-        if hasattr(self, "shell"):
-            self.shell.setProperty("maximized", is_max)
-            self.shell.style().unpolish(self.shell)
-            self.shell.style().polish(self.shell)
-            for child in self.shell.findChildren(QFrame):
-                child.style().unpolish(child)
-                child.style().polish(child)
-            if hasattr(self, "status"):
-                self.status.style().unpolish(self.status)
-                self.status.style().polish(self.status)
+        is_max = bool(self.isMaximized() or (self.windowState() & Qt.WindowMaximized))
         if hasattr(self, "title_bar"):
             self.title_bar.sync_max_icon(is_max)
 
@@ -1018,13 +1074,16 @@ class RAntivirusWindow(QMainWindow):
         freq = sched.get("frequency", "Daily")
         if freq == "Daily" and hm == str(sched.get("time", "")).strip() and self._last_sched_run_minute != hm:
             self._last_sched_run_minute = hm
+            self._start_all_task_progress(f"Scheduled daily scan: {target}")
             self.engine.run_clamav_scan(target, auto_quarantine=True, source_label="Scheduled Daily")
         elif freq == "Hourly" and now.minute == 0 and self._last_sched_run_minute != hm:
             self._last_sched_run_minute = hm
+            self._start_all_task_progress(f"Scheduled hourly scan: {target}")
             self.engine.run_clamav_scan(target, auto_quarantine=True, source_label="Scheduled Hourly")
 
     def set_rtl_state(self, state):
-        self._rtl = state
+        self._rtl = bool(state)
+        self.setLayoutDirection(Qt.RightToLeft if self._rtl else Qt.LeftToRight)
         self._update_texts()
 
     def _build_ui(self):
@@ -1032,12 +1091,11 @@ class RAntivirusWindow(QMainWindow):
         central.setObjectName("RootContainer")
         self.setCentralWidget(central)
         self._root_lay = QVBoxLayout(central)
-        self._root_lay.setContentsMargins(6, 6, 6, 6)
+        self._root_lay.setContentsMargins(0, 0, 0, 0)
         self._root_lay.setSpacing(0)
 
         self.shell = QFrame()
         self.shell.setObjectName("WindowShell")
-        self.shell.setProperty("maximized", False)
         shell_lay = QVBoxLayout(self.shell)
         shell_lay.setContentsMargins(0, 0, 0, 0)
         shell_lay.setSpacing(0)
@@ -1225,6 +1283,11 @@ class RAntivirusWindow(QMainWindow):
         r_lay.addStretch()
         body_lay.addWidget(right)
 
+        self.scan_progress = TaskProgressBlock()
+        self.startup_progress = TaskProgressBlock()
+        self.memory_progress = TaskProgressBlock()
+        self._progress_blocks = [self.scan_progress, self.startup_progress, self.memory_progress]
+
         self.stack.addWidget(self._build_overview_page())
         self.stack.addWidget(self._build_scan_page())
         self.stack.addWidget(self._build_startup_boot_page())
@@ -1239,18 +1302,24 @@ class RAntivirusWindow(QMainWindow):
             self.stack.addWidget(QWidget())
 
         self.status = QStatusBar()
-        self.setStatusBar(self.status)
+        self.status.setSizeGripEnabled(False)
         self._status_shield = QLabel()
         self._status_defs = QLabel()
+        self._status_task = QLabel("")
+        self._status_task.setObjectName("MutedText")
+        self._status_task.hide()
         self._status_theme = QLabel()
-        self._status_version = QLabel("v2.3.2")
+        self._status_version = QLabel("v0.3.1")
         self.status.addWidget(self._status_shield)
         self.status.addWidget(QLabel("  |  "))
         self.status.addWidget(self._status_defs)
+        self.status.addWidget(self._status_task)
         self.status.addPermanentWidget(self._status_theme)
         self.status.addPermanentWidget(self._status_version)
+        shell_lay.addWidget(self.status)
 
         self._set_console_collapsed(self._console_collapsed, save=False)
+        self.setLayoutDirection(Qt.RightToLeft if self._rtl else Qt.LeftToRight)
         self._update_texts()
         self.refresh_exclusions(self.engine.config.get("exclusions", []))
         self.refresh_quarantine()
@@ -1260,7 +1329,7 @@ class RAntivirusWindow(QMainWindow):
         self.console_box.setVisible(not collapsed)
         self.clear_btn.setVisible(not collapsed)
         if save:
-            if "ui" not in self.engine.config:
+            if "ui" not in self.engine.config or not isinstance(self.engine.config["ui"], dict):
                 self.engine.config["ui"] = {}
             self.engine.config["ui"]["console_collapsed"] = collapsed
             self.engine.save_config()
@@ -1291,7 +1360,14 @@ class RAntivirusWindow(QMainWindow):
         self._toast("Minimized to system tray", "info")
 
     def _confirm_quit(self):
-        dlg = ConfirmDialog(self, "Exit R Antivirus?", "Are you sure you want to exit?", confirm_text="Exit")
+        tr = TRANS["ar"] if self._rtl else TRANS["en"]
+        dlg = ConfirmDialog(
+            self,
+            tr["exit_title"],
+            tr["exit_msg"],
+            confirm_text=tr["exit_ok"],
+            cancel_text=tr["cancel"],
+        )
         if dlg.exec() == QDialog.Accepted:
             self.engine.stop_realtime()
             self.engine.stop_active_process()
@@ -1324,7 +1400,7 @@ class RAntivirusWindow(QMainWindow):
         self.hero_status_lbl.setText(tr["alert_state"] if has_threats else tr["protected"])
         self.hero_sub_lbl.setText(tr["alert_sub"] if has_threats else tr["protected_sub"])
 
-        self.hero_scan_btn.set_text(tr["scan_now"])
+        self.hero_scan_btn.setText(tr["scan_now"])
         self.btn_upd_defs.setText(tr["update_defs"])
         self.btn_full_disk.setText(tr["full_disk"])
         self.btn_view_quar.setText(tr["view_quar"])
@@ -1342,7 +1418,7 @@ class RAntivirusWindow(QMainWindow):
         self.chk_inf.setText(tr["infected_only"])
         self.chk_arc.setText(tr["deep_arch"])
         self.chk_quar.setText(tr["auto_quar"])
-        self.btn_run_scan.set_text(tr["run_scan"])
+        self.btn_run_scan.setText(tr["run_scan"])
         self.btn_full_scan2.setText(tr["full_disk"])
         self.btn_stop_scan.setText(tr["stop"])
 
@@ -1357,6 +1433,7 @@ class RAntivirusWindow(QMainWindow):
         self.lbl_mem_scan.setText(tr["mem_scan"])
         self.chk_mem_quar.setText(tr["auto_quar_mem"])
         self.btn_scan_mem.setText(tr["scan_mem"])
+        self.chk_sched_en.setText(tr["enable_sched"])
         self.lbl_freq.setText(tr["frequency"])
         self.lbl_time.setText(tr["time_hhmm"])
         self.lbl_target.setText(tr["target_folder"])
@@ -1374,9 +1451,12 @@ class RAntivirusWindow(QMainWindow):
         self.quar_widget._empty.t.setText(tr["quar_empty"])
         self.btn_refresh_quar.setText(tr["refresh"])
         self.btn_restore_quar.setText(tr["restore"])
+        self.btn_trust_quar.setText(tr["trust_exclude"])
         self.btn_sha_quar.setText(tr["sha256"])
+        self.btn_details_quar.setText(tr["details"])
         self.btn_del_quar.setText(tr["delete"])
 
+        self.btn_view_incidents.setText(tr["recent_incidents"])
         self.btn_exp_html.setText(tr["export_html"])
         self.btn_exp_csv.setText(tr["export_csv"])
         self.btn_exp_set.setText(tr["export_set"])
@@ -1404,6 +1484,7 @@ class RAntivirusWindow(QMainWindow):
 
     def _toggle_rtl(self):
         self._rtl = not self._rtl
+        self.setLayoutDirection(Qt.RightToLeft if self._rtl else Qt.LeftToRight)
         self.rtl_changed.emit(self._rtl)
         self._update_texts()
 
@@ -1443,7 +1524,7 @@ class RAntivirusWindow(QMainWindow):
         self.qc_shield.clicked.connect(self._toggle_shield)
 
         self.qc_defs = QuickStatCard("Virus Definitions", "Never", "🔄")
-        self.qc_defs.clicked.connect(self.update_defs_requested.emit)
+        self.qc_defs.clicked.connect(self._trigger_update_defs)
 
         self.qc_quar = QuickStatCard("Quarantine Vault", "0 files", "📦")
         self.qc_quar.clicked.connect(lambda: self._switch_page(5))
@@ -1457,10 +1538,10 @@ class RAntivirusWindow(QMainWindow):
         quick.setSpacing(10)
         self.btn_upd_defs = QPushButton()
         self.btn_upd_defs.setObjectName("ActionBtn")
-        self.btn_upd_defs.clicked.connect(self.update_defs_requested.emit)
+        self.btn_upd_defs.clicked.connect(self._trigger_update_defs)
         self.btn_full_disk = QPushButton()
         self.btn_full_disk.setObjectName("ActionBtn")
-        self.btn_full_disk.clicked.connect(self.full_scan_requested.emit)
+        self.btn_full_disk.clicked.connect(self._trigger_full_scan)
         self.btn_view_quar = QPushButton()
         self.btn_view_quar.setObjectName("ActionBtn")
         self.btn_view_quar.clicked.connect(lambda: self._switch_page(5))
@@ -1523,7 +1604,7 @@ class RAntivirusWindow(QMainWindow):
         self.btn_run_scan.clicked.connect(self._run_selected_scan)
         self.btn_full_scan2 = QPushButton()
         self.btn_full_scan2.setObjectName("ActionBtn")
-        self.btn_full_scan2.clicked.connect(self.full_scan_requested.emit)
+        self.btn_full_scan2.clicked.connect(self._trigger_full_scan)
         self.btn_stop_scan = QPushButton()
         self.btn_stop_scan.setObjectName("DangerBtn")
         self.btn_stop_scan.clicked.connect(self.stop_requested.emit)
@@ -1533,14 +1614,9 @@ class RAntivirusWindow(QMainWindow):
         act.addStretch()
         c.addLayout(act)
 
-        prog = QHBoxLayout()
-        self.scan_prog_bar = QProgressBar()
-        self.scan_prog_bar.setRange(0, 100)
-        self.scan_prog_lbl = QLabel("0%")
-        self.scan_prog_lbl.setObjectName("MutedText")
-        prog.addWidget(self.scan_prog_bar)
-        prog.addWidget(self.scan_prog_lbl)
-        c.addLayout(prog)
+        c.addWidget(self.scan_progress)
+        self.scan_prog_bar = self.scan_progress.bar
+        self.scan_prog_lbl = self.scan_progress.pct_lbl
 
         lay.addWidget(card)
         lay.addStretch()
@@ -1562,6 +1638,7 @@ class RAntivirusWindow(QMainWindow):
         self.btn_scan_startup.setObjectName("ActionBtn")
         self.btn_scan_startup.clicked.connect(self._run_startup_scan)
         s.addWidget(self.btn_scan_startup, alignment=Qt.AlignLeft)
+        s.addWidget(self.startup_progress)
         lay.addWidget(st)
 
         bt = QFrame()
@@ -1603,6 +1680,7 @@ class RAntivirusWindow(QMainWindow):
         self.btn_scan_mem.setObjectName("ActionBtn")
         self.btn_scan_mem.clicked.connect(self._run_memory_scan)
         m.addWidget(self.btn_scan_mem, alignment=Qt.AlignLeft)
+        m.addWidget(self.memory_progress)
         lay.addWidget(mem)
 
         sch = QFrame()
@@ -1610,7 +1688,7 @@ class RAntivirusWindow(QMainWindow):
         s = QGridLayout(sch)
         s.setContentsMargins(14, 14, 14, 14)
         cfg = self.engine.config.get("schedule", {})
-        self.chk_sched_en = QCheckBox("Enable Scheduled Scan")
+        self.chk_sched_en = QCheckBox()
         self.chk_sched_en.setChecked(bool(cfg.get("enabled", False)))
         self.cmb_freq = QComboBox()
         self.cmb_freq.addItems(["Daily", "Hourly"])
@@ -1689,13 +1767,19 @@ class RAntivirusWindow(QMainWindow):
         self.btn_restore_quar = QPushButton()
         self.btn_restore_quar.setObjectName("ActionBtn")
         self.btn_restore_quar.clicked.connect(lambda: self._emit_quar_action("restore"))
+        self.btn_trust_quar = QPushButton()
+        self.btn_trust_quar.setObjectName("ActionBtn")
+        self.btn_trust_quar.clicked.connect(self._trust_and_exclude_quar)
         self.btn_sha_quar = QPushButton()
         self.btn_sha_quar.setObjectName("ActionBtn")
         self.btn_sha_quar.clicked.connect(self._copy_quar_sha256)
+        self.btn_details_quar = QPushButton()
+        self.btn_details_quar.setObjectName("ActionBtn")
+        self.btn_details_quar.clicked.connect(self._show_quarantine_details)
         self.btn_del_quar = QPushButton()
         self.btn_del_quar.setObjectName("DangerBtn")
         self.btn_del_quar.clicked.connect(lambda: self._emit_quar_action("delete"))
-        for w in (self.btn_refresh_quar, self.btn_restore_quar, self.btn_sha_quar, self.btn_del_quar):
+        for w in (self.btn_refresh_quar, self.btn_restore_quar, self.btn_trust_quar, self.btn_sha_quar, self.btn_details_quar, self.btn_del_quar):
             row.addWidget(w)
         row.addStretch()
         c.addLayout(row)
@@ -1710,6 +1794,9 @@ class RAntivirusWindow(QMainWindow):
         rep.setObjectName("SoftCard")
         r = QHBoxLayout(rep)
         r.setContentsMargins(14, 14, 14, 14)
+        self.btn_view_incidents = QPushButton()
+        self.btn_view_incidents.setObjectName("ActionBtn")
+        self.btn_view_incidents.clicked.connect(self._open_incidents_dialog)
         self.btn_exp_html = QPushButton()
         self.btn_exp_html.setObjectName("ActionBtn")
         self.btn_exp_html.clicked.connect(lambda: self._export_report("html"))
@@ -1722,10 +1809,8 @@ class RAntivirusWindow(QMainWindow):
         self.btn_imp_set = QPushButton()
         self.btn_imp_set.setObjectName("ActionBtn")
         self.btn_imp_set.clicked.connect(self._import_settings_file)
-        r.addWidget(self.btn_exp_html)
-        r.addWidget(self.btn_exp_csv)
-        r.addWidget(self.btn_exp_set)
-        r.addWidget(self.btn_imp_set)
+        for w in (self.btn_view_incidents, self.btn_exp_html, self.btn_exp_csv, self.btn_exp_set, self.btn_imp_set):
+            r.addWidget(w)
         r.addStretch()
         outer.addWidget(rep)
 
@@ -1801,6 +1886,14 @@ class RAntivirusWindow(QMainWindow):
         if f:
             self.target_input.setText(f)
 
+    def _trigger_update_defs(self):
+        self._start_all_task_progress("Updating ClamAV definitions via freshclam...")
+        self.update_defs_requested.emit()
+
+    def _trigger_full_scan(self):
+        self._start_all_task_progress("Starting full disk scan...")
+        self.full_scan_requested.emit()
+
     def _run_selected_scan(self):
         target = self.target_input.text().strip()
         if not target:
@@ -1813,9 +1906,12 @@ class RAntivirusWindow(QMainWindow):
             "quarantine": self.chk_quar.isChecked()
         }
         is_clam = self.rb_clam.isChecked()
+        mode_lbl = "ClamAV Scan" if is_clam else "VirusTotal Check"
         self.btn_run_scan.set_busy(True, "Scanning")
         self.hero_scan_btn.set_busy(True, "Scanning")
         self._scan_busy = True
+        self._scan_completed_notified = False
+        self._start_all_task_progress(f"{mode_lbl}: {target}")
         self.scan_requested.emit(target, is_clam, opts)
 
     def start_scan_polling(self):
@@ -1825,27 +1921,75 @@ class RAntivirusWindow(QMainWindow):
         self._scan_poll.timeout.connect(self._check_scan_done)
         self._scan_poll.start(500)
 
-    def _check_scan_done(self):
-        if not self.engine.is_busy:
+    def _mark_scan_finished_once(self, msg: str, ok: bool = True):
+        if self._scan_poll:
             try:
                 self._scan_poll.stop()
             except Exception:
                 pass
-            self.scan_prog_bar.setValue(100)
-            self.btn_run_scan.set_busy(False)
-            self.hero_scan_btn.set_busy(False)
-            self._scan_busy = False
-            self._toast("Scan finished", "success")
-
-    def _on_scan_finished(self, msg):
+            self._scan_poll = None
         self.btn_run_scan.set_busy(False)
         self.hero_scan_btn.set_busy(False)
         self._scan_busy = False
-        self._toast(msg, "success")
+        if not self._scan_completed_notified:
+            self._scan_completed_notified = True
+            self._finish_all_task_progress(msg, success=ok)
+            self._toast(msg, "success" if ok else "warning")
 
-    def _update_progress_ui(self, pct, current, total):
-        self.scan_prog_bar.setValue(pct)
-        self.scan_prog_lbl.setText(f"{pct}% ({current}/{total})")
+    def _check_scan_done(self):
+        if not self.engine.is_busy:
+            self._mark_scan_finished_once("Scan finished", ok=True)
+
+    def _on_scan_finished(self, msg, ok=True):
+        self._mark_scan_finished_once(msg, ok=bool(ok))
+
+    def _start_status_bar_task(self, detail: str = "Scanning..."):
+        if hasattr(self, "_status_task"):
+            self._status_task.setText(f"⏳ 0% | ETA: --:-- | {detail}")
+            self._status_task.show()
+
+    def _update_status_bar_task(self, pct: int, current: int = 0, total: int = 0, eta_text: str = "--:--", detail: str = ""):
+        if not hasattr(self, "_status_task"):
+            return
+        pct = max(0, min(100, int(pct)))
+        count_part = f" ({current}/{total})" if total > 0 else ""
+        short_detail = f" — {detail}" if detail else ""
+        self._status_task.setText(f"⏳ {pct}%{count_part} | ETA: {eta_text}{short_detail}")
+        self._status_task.show()
+
+    def _finish_status_bar_task(self, detail: str = "Done", hold_ms: int = 4000):
+        if not hasattr(self, "_status_task"):
+            return
+        self._status_task.setText(f"✅ {detail}")
+        self._status_task.show()
+        QTimer.singleShot(hold_ms, self._clear_status_bar_task)
+
+    def _clear_status_bar_task(self):
+        if hasattr(self, "_status_task") and not self._scan_busy:
+            self._status_task.setText("")
+            self._status_task.hide()
+
+    def _start_all_task_progress(self, detail: str):
+        for blk in getattr(self, "_progress_blocks", []):
+            blk.start_task(detail)
+        self._start_status_bar_task(detail)
+
+    def _update_all_task_progress(self, pct: int, current: int = 0, total: int = 0, detail: str = ""):
+        eta_text = "--:--"
+        for blk in getattr(self, "_progress_blocks", []):
+            blk.update_progress(pct, current, total, detail or None)
+            computed = blk.compute_eta_text(pct)
+            if computed != "--:--":
+                eta_text = computed
+        self._update_status_bar_task(pct, current, total, eta_text, detail)
+
+    def _finish_all_task_progress(self, detail: str, success: bool = True):
+        for blk in getattr(self, "_progress_blocks", []):
+            blk.finish_task(detail, success=success)
+        self._finish_status_bar_task(detail if success else f"Stopped: {detail}")
+
+    def _update_progress_ui(self, pct, current, total, detail=""):
+        self._update_all_task_progress(pct, current, total, detail)
 
     def _poll_stats(self):
         tr = TRANS["ar"] if self._rtl else TRANS["en"]
@@ -1903,10 +2047,12 @@ class RAntivirusWindow(QMainWindow):
         self.right_boot_status.style().polish(self.right_boot_status)
 
     def _run_startup_scan(self):
+        self._start_all_task_progress("Scanning Windows startup items...")
         self.engine.scan_startup_items(
             auto_quarantine=self.chk_startup_quar.isChecked(),
-            on_complete=lambda total, threats: self.bridge.popup_signal.emit(
-                "Startup Scan", f"Inspected {total} items, threats: {threats}"
+            on_complete=lambda total, threats: (
+                self._finish_all_task_progress(f"Startup scan: {total} items, {threats} threats", success=True),
+                self.bridge.popup_signal.emit("Startup Scan", f"Inspected {total} items, threats: {threats}")
             ),
         )
 
@@ -1922,10 +2068,12 @@ class RAntivirusWindow(QMainWindow):
         self._toast("Boot scan disabled" if ok else "Failed to disable boot scan", "warning" if ok else "error")
 
     def _run_memory_scan(self):
+        self._start_all_task_progress("Scanning active memory processes...")
         self.engine.scan_running_processes(
             auto_quarantine=self.chk_mem_quar.isChecked(),
-            on_complete=lambda total, threats: self.bridge.popup_signal.emit(
-                "Memory Scan", f"Inspected {total} processes, threats: {threats}"
+            on_complete=lambda total, threats: (
+                self._finish_all_task_progress(f"Memory scan: {total} processes, {threats} threats", success=True),
+                self.bridge.popup_signal.emit("Memory Scan", f"Inspected {total} processes, threats: {threats}")
             ),
         )
 
@@ -1933,22 +2081,167 @@ class RAntivirusWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(self, "Exclude Folder")
         if d:
             self.engine.add_exclusion(d)
+            self.engine.clear_threat_for_target(d)
+            self.refresh_exclusions(self.engine.config.get("exclusions", []))
             self.exclusions_changed.emit()
+            self._poll_stats()
             self._toast("Folder excluded", "success")
 
     def _add_excl_file(self):
         f, _ = QFileDialog.getOpenFileName(self, "Exclude File")
         if f:
             self.engine.add_exclusion(f)
+            self.engine.clear_threat_for_target(f)
+            self.refresh_exclusions(self.engine.config.get("exclusions", []))
             self.exclusions_changed.emit()
+            self._poll_stats()
             self._toast("File excluded", "success")
 
     def _remove_excl(self):
         item = self.excl_list.currentItem()
         if item:
             self.engine.remove_exclusion(item.text())
+            self.refresh_exclusions(self.engine.config.get("exclusions", []))
             self.exclusions_changed.emit()
             self._toast("Exclusion removed", "info")
+
+    def _resolve_quarantine_origin_path(self, item_name: str) -> str:
+        meta = getattr(self.engine, "quarantine_meta", None)
+        if isinstance(meta, dict):
+            entry = meta.get(item_name)
+            if isinstance(entry, dict) and entry.get("original_path"):
+                return str(entry["original_path"])
+            if isinstance(entry, str) and entry:
+                return entry
+
+        manifest_path = os.path.join(self.engine.quarantine_dir, "manifest.json")
+        if os.path.isfile(manifest_path):
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and data.get(item_name):
+                    val = data[item_name]
+                    return str(val.get("original_path", val) if isinstance(val, dict) else val)
+            except Exception:
+                pass
+        return ""
+
+    def _show_quarantine_details(self):
+        item = self.quar_list.currentItem()
+        if not item:
+            self._toast("Select a quarantined file first", "warning")
+            return
+        fname = item.text().strip()
+        meta = self.engine.quarantine_meta.get(fname, {}) if isinstance(self.engine.quarantine_meta, dict) else {}
+        orig = meta.get("original_path", "Unknown") if isinstance(meta, dict) else str(meta)
+        sig = meta.get("signature", "Unknown") if isinstance(meta, dict) else "Unknown"
+        q_at = meta.get("quarantined_at", "Unknown") if isinstance(meta, dict) else "Unknown"
+        dlg = ConfirmDialog(
+            self,
+            "Quarantine Item Details",
+            f"File: {fname}\nSignature: {sig}\nQuarantined: {q_at}\nOriginal Path: {orig}",
+            confirm_text="Close",
+            cancel_text="Close",
+            danger=False,
+        )
+        dlg.exec()
+
+    def _open_incidents_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Recent Security Incidents")
+        dlg.resize(740, 440)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(10)
+
+        top = QHBoxLayout()
+        flt = QComboBox()
+        flt.addItems(["ALL", "THREAT", "CLEAN"])
+        inc_list = QListWidget()
+        top.addWidget(QLabel("Filter:"))
+        top.addWidget(flt)
+        top.addStretch()
+        lay.addLayout(top)
+        lay.addWidget(inc_list, 1)
+
+        def reload_rows():
+            inc_list.clear()
+            mode = flt.currentText()
+            for inc in reversed(list(self.engine.incident_history)):
+                st = inc.get("status", "")
+                if mode != "ALL" and st != mode:
+                    continue
+                inc_list.addItem(
+                    f"[{inc.get('timestamp', '')}] [{st}] {inc.get('source', '')} -> {inc.get('target', '')} ({inc.get('details', '')})"
+                )
+
+        flt.currentTextChanged.connect(lambda _: reload_rows())
+        reload_rows()
+
+        btn_row = QHBoxLayout()
+        btn_excl = QPushButton("🛡️ Exclude Selected Target")
+        btn_excl.setObjectName("ActionBtn")
+
+        def exclude_selected():
+            cur = inc_list.currentItem()
+            if not cur:
+                return
+            txt = cur.text()
+            if "->" in txt and "(" in txt:
+                target = txt.split("->", 1)[1].rsplit("(", 1)[0].strip()
+                if target:
+                    self.engine.add_exclusion(target)
+                    self.engine.clear_threat_for_target(target)
+                    self.refresh_exclusions(self.engine.config.get("exclusions", []))
+                    self.exclusions_changed.emit()
+                    self._poll_stats()
+                    reload_rows()
+                    self._toast(f"Excluded & cleared: {target}", "success")
+
+        btn_excl.clicked.connect(exclude_selected)
+        btn_close = QPushButton("Close")
+        btn_close.setObjectName("ActionBtn")
+        btn_close.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_excl)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+        lay.addLayout(btn_row)
+        dlg.exec()
+
+    def _trust_and_exclude_quar(self):
+        item = self.quar_list.currentItem()
+        if not item:
+            self._toast("Select a quarantined file first", "warning")
+            return
+
+        item_name = item.text().strip()
+        origin_path = self._resolve_quarantine_origin_path(item_name)
+
+        if not origin_path:
+            dlg = ConfirmDialog(
+                self,
+                "Select Path to Exclude",
+                "Original path wasn't recorded in vault metadata. Choose the folder (recommended for false positives like NVIDIA App) or file to exclude.",
+                confirm_text="Pick Folder",
+                danger=False,
+            )
+            if dlg.exec() == QDialog.Accepted:
+                origin_path = QFileDialog.getExistingDirectory(self, "Select Folder to Exclude")
+            else:
+                origin_path, _ = QFileDialog.getOpenFileName(self, "Select File to Exclude")
+
+        if not origin_path:
+            return
+
+        norm_path = os.path.normpath(origin_path)
+        self.engine.add_exclusion(norm_path)
+        self.engine.clear_threat_for_target(norm_path)
+        self.engine.clear_threat_for_target(item_name)
+        self.refresh_exclusions(self.engine.config.get("exclusions", []))
+        self.exclusions_changed.emit()
+        self.quarantine_action.emit("restore", item_name)
+        self._poll_stats()
+        self._toast(f"Excluded & restoring: {item_name}", "success")
 
     def _copy_quar_sha256(self):
         item = self.quar_list.currentItem()
@@ -1998,10 +2291,14 @@ class RAntivirusWindow(QMainWindow):
 
     def _toggle_shield(self):
         if not self.engine.realtime_active:
-            folder = self.txt_sched_target.text().strip()
+            folder = str(self.engine.config.get("shield_target", "")).strip() or self.txt_sched_target.text().strip()
             if not os.path.isdir(folder):
-                self._toast("Choose a valid folder for Real-Time Shield", "warning")
-                return
+                folder = QFileDialog.getExistingDirectory(self, "Select Folder for Real-Time Shield")
+                if not folder:
+                    self._toast("Choose a valid folder for Real-Time Shield", "warning")
+                    return
+                self.engine.config["shield_target"] = os.path.abspath(folder)
+                self.engine.save_config()
             self.engine.start_realtime(folder, auto_quarantine=True)
             self._toast(f"Shield enabled for: {os.path.basename(folder)}", "success")
         else:
@@ -2009,12 +2306,15 @@ class RAntivirusWindow(QMainWindow):
             self._toast("Shield disabled", "info")
 
     def _save_schedule(self):
+        target_val = self.txt_sched_target.text().strip()
         data = {
             "enabled": self.chk_sched_en.isChecked(),
             "frequency": self.cmb_freq.currentText(),
             "time": self.txt_sched_time.text().strip(),
-            "target": self.txt_sched_target.text().strip()
+            "target": target_val
         }
+        if target_val and not str(self.engine.config.get("shield_target", "")).strip():
+            self.engine.config["shield_target"] = target_val
         self.schedule_saved.emit(data)
 
     def _save_settings(self):
@@ -2026,7 +2326,7 @@ class RAntivirusWindow(QMainWindow):
             "max_scansize": self.txt_max_ss.text().strip()
         }
         self._sounds = self.chk_sounds.isChecked()
-        if "ui" not in self.engine.config:
+        if "ui" not in self.engine.config or not isinstance(self.engine.config["ui"], dict):
             self.engine.config["ui"] = {}
         self.engine.config["ui"]["sounds"] = self._sounds
         self.settings_saved.emit(data)
@@ -2037,33 +2337,72 @@ class RAntivirusWindow(QMainWindow):
     def refresh_quarantine(self):
         items = []
         if os.path.isdir(self.engine.quarantine_dir):
-            items = sorted(os.listdir(self.engine.quarantine_dir))
+            items = sorted(
+                f for f in os.listdir(self.engine.quarantine_dir)
+                if f != "manifest.json" and os.path.isfile(os.path.join(self.engine.quarantine_dir, f))
+            )
         self.quar_widget.set_items(items)
         if hasattr(self, "nav_buttons"):
             self._update_texts()
 
     def _emit_quar_action(self, action):
+        tr = TRANS["ar"] if self._rtl else TRANS["en"]
         item = self.quar_list.currentItem()
         if item:
-            self.quarantine_action.emit(action, item.text())
+            fname = item.text()
+            if action == "delete":
+                dlg = ConfirmDialog(
+                    self,
+                    tr["del_quar_title"],
+                    tr["del_quar_msg"].format(name=fname),
+                    confirm_text=tr["del_quar_ok"],
+                    cancel_text=tr["cancel"],
+                    danger=True,
+                )
+                if dlg.exec() != QDialog.Accepted:
+                    return
+            self.quarantine_action.emit(action, fname)
+            self._poll_stats()
 
-    def _toast(self, message, kind="info"):
+    def _reposition_toasts(self):
         valid_toasts = []
+        y_pos = 56
+        max_y = max(70, self.height() - 90)
         for t in self._toast_stack:
             if t is not None:
                 try:
                     if shiboken6.isValid(t):
+                        t.setFixedWidth(min(440, max(300, self.width() - 100)))
+                        x_pos = max(10, (self.width() - t.width()) // 2)
+                        if y_pos + t.height() > max_y:
+                            t.hide()
+                            t.deleteLater()
+                            continue
+                        t.move(x_pos, y_pos)
+                        y_pos += t.height() + 8
                         valid_toasts.append(t)
                 except Exception:
                     pass
         self._toast_stack = valid_toasts
+
+    def _toast(self, message, kind="info"):
+        self._reposition_toasts()
         toast = Toast(self, message, kind)
+        x_pos = max(10, (self.width() - toast.width()) // 2)
+        y_pos = 56
         for t in self._toast_stack:
             if t.isVisible():
-                t.move(t.x(), t.y() + t.height() + 8)
+                y_pos += t.height() + 8
+        if y_pos + toast.height() > max(70, self.height() - 90):
+            y_pos = 56
+        toast.move(x_pos, y_pos)
         self._toast_stack.append(toast)
 
     def _append_log(self, msg, tag=""):
+        sb = self.console_box.verticalScrollBar()
+        at_bottom = sb.value() >= (sb.maximum() - 4)
+        prev_val = sb.value()
+
         color = "#e8e2f3" if self._theme == "light" else "#d8c8f0"
         if tag == "threat":
             color = "#ff6b6b"
@@ -2073,7 +2412,21 @@ class RAntivirusWindow(QMainWindow):
             color = "#64b5f6"
         elif tag == "vt":
             color = "#ea80fc"
+
         self.console_box.append(f'<span style="color:{color};">{msg}</span>')
+
+        doc = self.console_box.document()
+        if doc.blockCount() > 2000:
+            cursor = self.console_box.textCursor()
+            cursor.movePosition(cursor.Start)
+            cursor.select(cursor.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()
+
+        if at_bottom:
+            sb.setValue(sb.maximum())
+        else:
+            sb.setValue(prev_val)
 
     def showEvent(self, event):
         super().showEvent(event)
