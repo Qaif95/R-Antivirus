@@ -30,21 +30,34 @@ class WindowsFolderWatcher:
         self.running = False
         self._recent = {}
         self._lock = threading.Lock()
+        self._thread = None
 
     def start(self):
         if self.running or not os.path.isdir(self.folder_path):
             return
         self.running = True
-        threading.Thread(target=self._run_watcher, daemon=True).start()
+        self._thread = threading.Thread(target=self._run_watcher, daemon=True)
+        self._thread.start()
 
     def stop(self):
         self.running = False
-        if self.process:
+        proc = self.process
+        self.process = None
+        if proc is not None:
             try:
-                self.process.terminate()
+                if proc.stdout and not proc.stdout.closed:
+                    proc.stdout.close()
             except Exception:
                 pass
-            self.process = None
+            try:
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
     def _run_watcher(self):
         escaped_path = self.folder_path.replace("'", "''")
@@ -68,11 +81,13 @@ class WindowsFolderWatcher:
             Start-Sleep -Milliseconds 500
         }}
         """
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
         try:
-            self.process = subprocess.Popen(
+            proc = subprocess.Popen(
                 ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -81,7 +96,10 @@ class WindowsFolderWatcher:
                 errors="replace",
                 startupinfo=startupinfo,
             )
-            for raw_line in self.process.stdout:
+            self.process = proc
+            if proc.stdout is None:
+                return
+            for raw_line in proc.stdout:
                 if not self.running:
                     break
                 filepath = raw_line.strip()
@@ -101,6 +119,8 @@ class WindowsFolderWatcher:
                 self.on_file_event(filepath)
         except Exception:
             pass
+        finally:
+            self.running = False
 
 
 class RAntiVirusEngine:
@@ -114,12 +134,19 @@ class RAntiVirusEngine:
         self.restored_dir = os.path.join(self.base_dir, "Restored")
         self.reports_dir = os.path.join(self.base_dir, "Reports")
         self.config_path = os.path.join(self.base_dir, "r_antivirus_config.json")
+        self.manifest_path = os.path.join(self.quarantine_dir, "manifest.json")
+        self.state_path = os.path.join(self.base_dir, "incidents_state.json")
 
         os.makedirs(self.quarantine_dir, exist_ok=True)
         os.makedirs(self.restored_dir, exist_ok=True)
         os.makedirs(self.reports_dir, exist_ok=True)
 
+        self._state_lock = threading.Lock()
+        self._proc_lock = threading.Lock()
+        self._stop_requested = False
+
         self.config = self._load_config()
+        self.quarantine_meta = self._load_quarantine_manifest()
         self.process = None
         self.is_busy = False
         self.incident_history = []
@@ -132,6 +159,7 @@ class RAntiVirusEngine:
             "threats_blocked": 0,
             "last_update": "Never"
         }
+        self._load_persistent_state()
 
         self.boot_scanner = BootScanner(
             clamscan_path=self.config.get("clamscan_path"),
@@ -140,17 +168,157 @@ class RAntiVirusEngine:
 
         self.realtime_active = False
         self.watcher = None
+        self.watchers = []
         self.realtime_queue = queue.Queue()
 
         threading.Thread(target=self._realtime_worker, daemon=True).start()
 
+    def _load_persistent_state(self):
+        if not os.path.isfile(self.state_path):
+            return
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                loaded_stats = data.get("stats")
+                if isinstance(loaded_stats, dict):
+                    self.stats["total_scanned"] = int(loaded_stats.get("total_scanned", 0) or 0)
+                    self.stats["threats_blocked"] = int(loaded_stats.get("threats_blocked", 0) or 0)
+                    self.stats["last_update"] = str(loaded_stats.get("last_update", "Never") or "Never")
+                loaded_inc = data.get("incident_history")
+                if isinstance(loaded_inc, list):
+                    self.incident_history = [x for x in loaded_inc if isinstance(x, dict)][-500:]
+        except Exception:
+            pass
+
+    def _save_persistent_state(self):
+        try:
+            payload = {
+                "stats": dict(self.stats),
+                "incident_history": list(self.incident_history)[-500:],
+            }
+            with open(self.state_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.log(f"[ERROR] Failed to persist state: {e}", "threat")
+
+    @staticmethod
+    def _normalize_clean_name(hint: str) -> str:
+        raw = str(hint or "").strip().replace("\\", "/")
+        base = os.path.basename(raw)
+        if base.lower().endswith(".quarantine"):
+            base = base[:-len(".quarantine")]
+        if len(base) > 16 and base[8] == "_" and base[15] == "_":
+            base = base[16:]
+        return base.lower()
+
+    @staticmethod
+    def _normalize_path_lower(path_str: str) -> str:
+        return os.path.normpath(str(path_str or "").strip()).replace("\\", "/").lower()
+
+    def _load_quarantine_manifest(self):
+        if os.path.isfile(self.manifest_path):
+            try:
+                with open(self.manifest_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+        return {}
+
+    def _save_quarantine_manifest(self):
+        try:
+            with open(self.manifest_path, "w", encoding="utf-8") as f:
+                json.dump(self.quarantine_meta, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.log(f"[ERROR] Failed to save quarantine manifest: {e}", "threat")
+
+    def remove_quarantine_entry(self, quarantine_filename):
+        with self._state_lock:
+            if quarantine_filename in self.quarantine_meta:
+                del self.quarantine_meta[quarantine_filename]
+                self._save_quarantine_manifest()
+
+    def clear_threat_for_target(self, target_hint: str):
+        if not target_hint:
+            return
+        norm_hint = self._normalize_path_lower(target_hint)
+        clean_hint = self._normalize_clean_name(target_hint)
+
+        with self._state_lock:
+            remaining = []
+            cleared_count = 0
+            for inc in self.incident_history:
+                inc_target = self._normalize_path_lower(inc.get("target", ""))
+                inc_clean = self._normalize_clean_name(inc_target)
+                matched = False
+                if inc.get("status") == "THREAT":
+                    if norm_hint and (
+                        inc_target == norm_hint
+                        or inc_target.startswith(norm_hint + "/")
+                        or (clean_hint and inc_clean == clean_hint)
+                    ):
+                        matched = True
+                if matched:
+                    cleared_count += 1
+                else:
+                    remaining.append(inc)
+
+            if cleared_count > 0:
+                self.incident_history = remaining
+                self.stats["threats_blocked"] = max(0, int(self.stats.get("threats_blocked", 0)) - cleared_count)
+            else:
+                self.stats["threats_blocked"] = max(0, int(self.stats.get("threats_blocked", 0)) - 1)
+            self._save_persistent_state()
+
+    def _has_valid_clamscan(self):
+        exe_path = str(self.config.get("clamscan_path", "")).strip()
+        if not exe_path:
+            self.log("[ERROR] clamscan path is not configured.", "threat")
+            return False
+        if not os.path.isfile(exe_path):
+            resolved = shutil.which(exe_path)
+            if resolved and os.path.isfile(resolved):
+                self.config["clamscan_path"] = resolved
+                return True
+            self.log(f"[ERROR] clamscan executable not found: {exe_path}", "threat")
+            return False
+        return True
+
+    def _increment_scanned(self, count=1):
+        with self._state_lock:
+            self.stats["total_scanned"] += count
+
+    def _estimate_target_items(self, target_path, cap=25000):
+        if not os.path.exists(target_path):
+            return 1
+        if os.path.isfile(target_path):
+            return 1
+        total = 0
+        try:
+            for root, dirs, files in os.walk(target_path):
+                if self.is_excluded(root):
+                    dirs[:] = []
+                    continue
+                total += len(files)
+                if total >= cap:
+                    return cap
+        except Exception:
+            pass
+        return max(1, total)
+
     def _load_config(self):
+        downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        default_shield = downloads_dir if os.path.isdir(downloads_dir) else os.path.expanduser("~")
         default_cfg = {
             "clamscan_path": self.find_executable("clamscan"),
             "freshclam_path": self.find_executable("freshclam"),
             "vt_api_key": "",
             "max_filesize": "250M",
             "max_scansize": "500M",
+            "shield_target": default_shield,
+            "shield_targets": [default_shield],
             "exclusions": [self.quarantine_dir, self.restored_dir, self.reports_dir],
             "schedule": {"enabled": False, "frequency": "Daily", "time": "14:00", "target": ""},
         }
@@ -158,15 +326,23 @@ class RAntiVirusEngine:
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
-                    default_cfg.update(loaded)
+                    if isinstance(loaded, dict):
+                        default_cfg.update(loaded)
             except Exception:
                 pass
+        if not str(default_cfg.get("shield_target", "")).strip():
+            sched_target = str(default_cfg.get("schedule", {}).get("target", "")).strip()
+            default_cfg["shield_target"] = sched_target or default_shield
+        if not isinstance(default_cfg.get("shield_targets"), list) or not default_cfg["shield_targets"]:
+            default_cfg["shield_targets"] = [default_cfg["shield_target"]]
         return default_cfg
 
     def save_config(self):
         try:
+            with self._state_lock:
+                cfg_snapshot = json.loads(json.dumps(self.config))
             with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=2, ensure_ascii=False)
+                json.dump(cfg_snapshot, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self.log(f"[ERROR] Failed to save config: {e}", "threat")
 
@@ -187,8 +363,14 @@ class RAntiVirusEngine:
         return name
 
     def is_excluded(self, path):
+        if not path:
+            return False
         norm_target = os.path.normcase(os.path.abspath(path))
-        for exc in self.config.get("exclusions", []):
+        if norm_target == os.path.normcase(os.path.abspath(self.manifest_path)):
+            return True
+        with self._state_lock:
+            exclusions = list(self.config.get("exclusions", []))
+        for exc in exclusions:
             norm_exc = os.path.normcase(os.path.abspath(exc))
             if norm_target == norm_exc or norm_target.startswith(norm_exc + os.sep):
                 return True
@@ -196,27 +378,34 @@ class RAntiVirusEngine:
 
     def add_exclusion(self, path):
         abs_path = os.path.abspath(path)
-        if abs_path not in self.config["exclusions"]:
-            self.config["exclusions"].append(abs_path)
-            self.save_config()
+        with self._state_lock:
+            if abs_path not in self.config["exclusions"]:
+                self.config["exclusions"].append(abs_path)
+        self.save_config()
 
     def remove_exclusion(self, path):
-        if path in self.config["exclusions"]:
-            self.config["exclusions"].remove(path)
-            self.save_config()
+        abs_path = os.path.abspath(path)
+        with self._state_lock:
+            if path in self.config["exclusions"]:
+                self.config["exclusions"].remove(path)
+            elif abs_path in self.config["exclusions"]:
+                self.config["exclusions"].remove(abs_path)
+        self.save_config()
 
     def record_incident(self, source, target, status, details):
-        self.incident_history.append(
-            {
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "source": source,
-                "target": target,
-                "status": status,
-                "details": details,
-            }
-        )
-        if status == "THREAT":
-            self.stats["threats_blocked"] += 1
+        with self._state_lock:
+            self.incident_history.append(
+                {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "source": source,
+                    "target": target,
+                    "status": status,
+                    "details": details,
+                }
+            )
+            if status == "THREAT":
+                self.stats["threats_blocked"] += 1
+            self._save_persistent_state()
 
     def _get_gpu_usage_cached(self):
         if os.name != "nt":
@@ -247,12 +436,14 @@ class RAntiVirusEngine:
                 )
                 val = (res.stdout or "").strip()
                 if val:
-                    self._cached_gpu = f"{val}%"
+                    with self._state_lock:
+                        self._cached_gpu = f"{val}%"
             except Exception:
                 pass
 
         threading.Thread(target=_poll_gpu, daemon=True).start()
-        return self._cached_gpu
+        with self._state_lock:
+            return self._cached_gpu
 
     def get_system_performance(self):
         try:
@@ -286,14 +477,39 @@ class RAntiVirusEngine:
         if not os.path.isfile(src_path):
             return None
         try:
+            with self._state_lock:
+                meta_entry = self.quarantine_meta.get(quarantine_filename)
+
+            orig_path = ""
+            if isinstance(meta_entry, dict):
+                orig_path = str(meta_entry.get("original_path", "")).strip()
+            elif isinstance(meta_entry, str):
+                orig_path = meta_entry.strip()
+
             clean_name = quarantine_filename
             if clean_name.endswith(".quarantine"):
                 clean_name = clean_name[: -len(".quarantine")]
             if len(clean_name) > 16 and clean_name[8] == "_" and clean_name[15] == "_":
                 clean_name = clean_name[16:]
 
+            if orig_path:
+                parent_dir = os.path.dirname(orig_path)
+                if parent_dir and os.path.isdir(parent_dir):
+                    dest_path = orig_path
+                    if os.path.exists(dest_path):
+                        base, ext = os.path.splitext(dest_path)
+                        dest_path = f"{base}_restored_{datetime.now().strftime('%H%M%S')}{ext}"
+                    shutil.move(src_path, dest_path)
+                    self.remove_quarantine_entry(quarantine_filename)
+                    self.clear_threat_for_target(orig_path or clean_name)
+                    self.log(f"[RESTORED] Moved {quarantine_filename} -> {dest_path}", "ok")
+                    return dest_path
+
+            os.makedirs(self.restored_dir, exist_ok=True)
             dest_path = os.path.join(self.restored_dir, clean_name)
             shutil.move(src_path, dest_path)
+            self.remove_quarantine_entry(quarantine_filename)
+            self.clear_threat_for_target(clean_name)
             self.log(f"[RESTORED] Moved {quarantine_filename} -> {dest_path}", "ok")
             return dest_path
         except Exception as e:
@@ -301,7 +517,7 @@ class RAntiVirusEngine:
             return None
 
     def get_file_sha256(self, file_path):
-        if not os.path.isfile(file_path):
+        if not file_path or not os.path.isfile(file_path):
             return None
         h = hashlib.sha256()
         with open(file_path, "rb") as f:
@@ -310,18 +526,21 @@ class RAntiVirusEngine:
         return h.hexdigest()
 
     def export_report(self, fmt="html"):
+        with self._state_lock:
+            history_snapshot = list(self.incident_history)
+
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         if fmt == "csv":
             out_path = os.path.join(self.reports_dir, f"R_antivirus_Report_{ts}.csv")
             with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.DictWriter(f, fieldnames=["timestamp", "source", "target", "status", "details"])
                 writer.writeheader()
-                writer.writerows(self.incident_history)
+                writer.writerows(history_snapshot)
             return out_path
 
         out_path = os.path.join(self.reports_dir, f"R_antivirus_Report_{ts}.html")
         rows_html = ""
-        for item in self.incident_history:
+        for item in history_snapshot:
             color = "#ffebee" if item["status"] == "THREAT" else "#e8f5e9"
             badge = "#c62828" if item["status"] == "THREAT" else "#2e7d32"
             rows_html += f"""
@@ -347,7 +566,7 @@ th {{ background: #263238; color: white; }}
 </style></head>
 <body>
 <h1>R antivirus - Security Audit Report</h1>
-<p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Total Events: {len(self.incident_history)}</p>
+<p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Total Events: {len(history_snapshot)}</p>
 <table>
 <tr><th>Timestamp</th><th>Engine</th><th>Target File</th><th>Status</th><th>Details</th></tr>
 {rows_html}
@@ -357,16 +576,42 @@ th {{ background: #263238; color: white; }}
         return out_path
 
     def quarantine_file(self, file_path, signature="Malware"):
-        if not os.path.isfile(file_path):
+        if not file_path or not os.path.isfile(file_path):
             return None
         try:
+            abs_orig = os.path.abspath(file_path)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            fname = os.path.basename(file_path)
+            fname = os.path.basename(abs_orig)
             dest_name = f"{ts}_{fname}.quarantine"
             dest_path = os.path.join(self.quarantine_dir, dest_name)
-            shutil.move(file_path, dest_path)
-            self.log(f"[QUARANTINED] Isolated: {dest_name}", "threat")
+            shutil.move(abs_orig, dest_path)
+
+            with self._state_lock:
+                self.quarantine_meta[dest_name] = {
+                    "original_path": abs_orig,
+                    "filename": fname,
+                    "signature": signature,
+                    "quarantined_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                self._save_quarantine_manifest()
+
+            self.log(f"[QUARANTINED] Isolated: {dest_name} (from {abs_orig})", "threat")
             return dest_name
+        except PermissionError as e:
+            self.log(
+                f"[LOCKED/DENIED] Cannot move '{file_path}' ({e}). Close locking apps or exclude trusted system folders.",
+                "threat",
+            )
+            return None
+        except OSError as e:
+            if getattr(e, "winerror", None) == 5:
+                self.log(
+                    f"[LOCKED/DENIED] Access denied (WinError 5) on '{file_path}'. File may be in use or protected.",
+                    "threat",
+                )
+            else:
+                self.log(f"[ERROR] Quarantine failed: {e}", "threat")
+            return None
         except Exception as e:
             self.log(f"[ERROR] Quarantine failed: {e}", "threat")
             return None
@@ -377,6 +622,34 @@ th {{ background: #263238; color: white; }}
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             return si
         return None
+
+    def _set_active_process(self, proc):
+        with self._proc_lock:
+            self.process = proc
+
+    def _clear_active_process(self, proc=None):
+        with self._proc_lock:
+            if proc is None or self.process is proc:
+                self.process = None
+
+    def _begin_task(self):
+        with self._proc_lock:
+            if self.is_busy:
+                return False
+            self.is_busy = True
+            self._stop_requested = False
+            self.process = None
+            return True
+
+    def _end_task(self):
+        with self._proc_lock:
+            self.is_busy = False
+            self._stop_requested = False
+            self.process = None
+
+    def _is_stop_requested(self):
+        with self._proc_lock:
+            return self._stop_requested
 
     def _build_clamscan_cmd(self, target, recursive=True, infected_only=True, archive=True):
         cmd = [self.config["clamscan_path"]]
@@ -396,7 +669,10 @@ th {{ background: #263238; color: white; }}
 
         cmd.append("--bell")
 
-        for exc in self.config.get("exclusions", []):
+        with self._state_lock:
+            exclusions = list(self.config.get("exclusions", []))
+
+        for exc in exclusions:
             if os.path.isdir(exc):
                 cmd.append(f"--exclude-dir={exc}")
             elif os.path.isfile(exc):
@@ -406,32 +682,32 @@ th {{ background: #263238; color: white; }}
         return cmd
 
     def run_clamav_scan(self, target, recursive=True, infected_only=True, archive=True, auto_quarantine=False, source_label="ClamAV Scan", progress_callback=None):
-        if self.is_busy:
+        if not target or not os.path.exists(target):
+            self.log(f"[ERROR] Target path does not exist: {target}", "threat")
+            return
+        if not self._has_valid_clamscan():
+            return
+        if not self._begin_task():
             self.log("[BUSY] Another task is already running.", "threat")
             return
 
         def task():
-            self.is_busy = True
             threats = 0
             scan_summary_lines = []
             capturing_summary = False
+            proc = None
 
             try:
-                total_files = 1
-                if os.path.isdir(target):
-                    total_files = max(1, sum(len(files) for _, _, files in os.walk(target)))
-                elif os.path.isfile(target):
-                    total_files = 1
-
+                total_files = self._estimate_target_items(target)
                 cmd = self._build_clamscan_cmd(
                     target=target,
                     recursive=recursive,
                     infected_only=infected_only,
                     archive=archive,
                 )
-                self.log(f"\n[{source_label}] Scanning: {target} (Total items: {total_files})", "shield")
+                self.log(f"\n[{source_label}] Scanning: {target} (Estimated items: {total_files})", "shield")
 
-                self.process = subprocess.Popen(
+                proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -440,47 +716,58 @@ th {{ background: #263238; color: white; }}
                     errors="replace",
                     startupinfo=self._hidden_startupinfo(),
                 )
+                self._set_active_process(proc)
 
                 scanned_count = 0
-                for raw in self.process.stdout:
-                    line = raw.strip()
-                    if not line:
-                        continue
+                last_ui_emit = 0.0
+                if proc.stdout is not None:
+                    for raw in proc.stdout:
+                        if self._is_stop_requested():
+                            break
+                        line = raw.strip()
+                        if not line:
+                            continue
 
-                    if "Known viruses:" in line or capturing_summary:
-                        capturing_summary = True
-                        scan_summary_lines.append(line)
-                        continue
+                        if "Known viruses:" in line or capturing_summary:
+                            capturing_summary = True
+                            scan_summary_lines.append(line)
+                            continue
 
-                    scanned_count += 1
-                    self.stats["total_scanned"] += 1
+                        scanned_count += 1
+                        self._increment_scanned(1)
 
-                    if progress_callback and total_files > 0:
-                        percent = min(int((scanned_count / total_files) * 100), 100)
-                        progress_callback(percent, scanned_count, total_files)
+                        now = time.monotonic()
+                        if progress_callback and total_files > 0 and (now - last_ui_emit >= 0.12 or scanned_count == total_files):
+                            last_ui_emit = now
+                            percent = min(int((scanned_count / max(total_files, scanned_count)) * 99), 99)
+                            progress_callback(percent, scanned_count, max(total_files, scanned_count))
 
-                    if line.endswith("FOUND"):
-                        threats += 1
-                        parts = line.rsplit(":", 1)
-                        fpath = parts[0].strip()
-                        sig = parts[1].replace("FOUND", "").strip() if len(parts) > 1 else "Threat"
-                        self.log(f"[THREAT] {line}", "threat")
-                        self.record_incident(source_label, fpath, "THREAT", sig)
-                        self.notify("R antivirus Threat Alert", f"{os.path.basename(fpath)} ({sig})", True)
-                        if auto_quarantine:
-                            self.quarantine_file(fpath, sig)
-                        self.on_threat()
-                    else:
-                        if not line.startswith("/") and not line.startswith("C:\\") and not line.startswith("D:\\"):
-                            self.log(line)
+                        if line.endswith("FOUND"):
+                            threats += 1
+                            parts = line.rsplit(":", 1)
+                            fpath = parts[0].strip()
+                            sig = parts[1].replace("FOUND", "").strip() if len(parts) > 1 else "Threat"
+                            self.log(f"[THREAT] {line}", "threat")
+                            self.record_incident(source_label, fpath, "THREAT", sig)
+                            self.notify("R antivirus Threat Alert", f"{os.path.basename(fpath)} ({sig})", True)
+                            if auto_quarantine:
+                                self.quarantine_file(fpath, sig)
+                            self.on_threat()
+                        else:
+                            is_drive_path = len(line) >= 3 and line[1] == ":" and line[2] in ("\\", "/")
+                            if not line.startswith("/") and not is_drive_path:
+                                self.log(line)
 
-                self.process.wait()
+                proc.wait()
                 self.last_scan_summary = "\n".join(scan_summary_lines) if scan_summary_lines else f"Scan completed. Threats found: {threats}"
 
+                final_total = max(total_files, scanned_count, 1)
                 if progress_callback:
-                    progress_callback(100, total_files, total_files)
+                    progress_callback(100, final_total, final_total)
 
-                if threats == 0 and self.process.returncode == 0:
+                if self._is_stop_requested():
+                    self.log(f"[{source_label}] Stopped by user (Threats: {threats}).", "threat")
+                elif threats == 0 and proc.returncode == 0:
                     self.record_incident(source_label, target, "CLEAN", "No threats detected")
                     self.log(f"[{source_label}] Completed cleanly.", "ok")
                 else:
@@ -488,19 +775,21 @@ th {{ background: #263238; color: white; }}
             except Exception as e:
                 self.log(f"[ERROR] Scan failed: {e}", "threat")
             finally:
-                self.is_busy = False
-                self.process = None
+                self._clear_active_process(proc)
+                self._end_task()
 
         threading.Thread(target=task, daemon=True).start()
 
     def run_full_system_scan(self, auto_quarantine=False, archive=True, progress_callback=None, on_complete=None):
-        if self.is_busy:
+        if not self._has_valid_clamscan():
+            return
+        if not self._begin_task():
             self.log("[BUSY] Another task is already running.", "threat")
             return
 
         def task():
-            self.is_busy = True
             total_threats = 0
+            num_drives = 0
             try:
                 drives = [f"{d}:\\" for d in "CDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{d}:\\")]
                 if not drives:
@@ -511,7 +800,7 @@ th {{ background: #263238; color: white; }}
                 num_drives = len(drives)
 
                 for idx, drive in enumerate(drives):
-                    if not self.is_busy:
+                    if self._is_stop_requested():
                         break
                     self.log(f"[FULL SCAN] Scanning drive {drive} ({idx + 1}/{num_drives})...", "shield")
                     cmd = self._build_clamscan_cmd(
@@ -520,7 +809,7 @@ th {{ background: #263238; color: white; }}
                         infected_only=True,
                         archive=archive,
                     )
-                    self.process = subprocess.Popen(
+                    proc = subprocess.Popen(
                         cmd,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
@@ -529,33 +818,41 @@ th {{ background: #263238; color: white; }}
                         errors="replace",
                         startupinfo=self._hidden_startupinfo(),
                     )
+                    self._set_active_process(proc)
 
                     drive_items = 0
-                    for raw in self.process.stdout:
-                        line = raw.strip()
-                        if not line:
-                            continue
-                        drive_items += 1
-                        self.stats["total_scanned"] += 1
+                    last_ui_emit = 0.0
+                    try:
+                        if proc.stdout is not None:
+                            for raw in proc.stdout:
+                                if self._is_stop_requested():
+                                    break
+                                line = raw.strip()
+                                if not line:
+                                    continue
+                                drive_items += 1
+                                self._increment_scanned(1)
 
-                        if progress_callback:
-                            overall_pct = min(100, int(((idx + min(0.95, drive_items / 5000.0)) / num_drives) * 100))
-                            progress_callback(overall_pct, idx + 1, num_drives)
+                                now = time.monotonic()
+                                if progress_callback and (now - last_ui_emit >= 0.15):
+                                    last_ui_emit = now
+                                    overall_pct = min(100, int(((idx + min(0.95, drive_items / 5000.0)) / num_drives) * 100))
+                                    progress_callback(overall_pct, idx + 1, num_drives)
 
-                        if line.endswith("FOUND"):
-                            total_threats += 1
-                            parts = line.rsplit(":", 1)
-                            fpath = parts[0].strip()
-                            sig = parts[1].replace("FOUND", "").strip() if len(parts) > 1 else "Threat"
-                            self.log(f"[FULL SCAN THREAT] {line}", "threat")
-                            self.record_incident("Full System Scan", fpath, "THREAT", sig)
-                            self.notify("R antivirus Full Scan Alert", f"{os.path.basename(fpath)} ({sig})", True)
-                            if auto_quarantine:
-                                self.quarantine_file(fpath, sig)
-                            self.on_threat()
-
-                    self.process.wait()
-                    self.process = None
+                                if line.endswith("FOUND"):
+                                    total_threats += 1
+                                    parts = line.rsplit(":", 1)
+                                    fpath = parts[0].strip()
+                                    sig = parts[1].replace("FOUND", "").strip() if len(parts) > 1 else "Threat"
+                                    self.log(f"[FULL SCAN THREAT] {line}", "threat")
+                                    self.record_incident("Full System Scan", fpath, "THREAT", sig)
+                                    self.notify("R antivirus Full Scan Alert", f"{os.path.basename(fpath)} ({sig})", True)
+                                    if auto_quarantine:
+                                        self.quarantine_file(fpath, sig)
+                                    self.on_threat()
+                        proc.wait()
+                    finally:
+                        self._clear_active_process(proc)
 
                 if progress_callback:
                     progress_callback(100, num_drives, num_drives)
@@ -566,18 +863,18 @@ th {{ background: #263238; color: white; }}
             except Exception as e:
                 self.log(f"[FULL SCAN ERROR] {e}", "threat")
             finally:
-                self.is_busy = False
-                self.process = None
+                self._end_task()
 
         threading.Thread(target=task, daemon=True).start()
 
     def scan_startup_items(self, auto_quarantine=False, on_complete=None):
-        if self.is_busy:
+        if not self._has_valid_clamscan():
+            return
+        if not self._begin_task():
             self.log("[BUSY] Another scan is running.", "threat")
             return
 
         def task():
-            self.is_busy = True
             try:
                 self.log("\n[STARTUP SCAN] Inspecting Windows startup registries & folders...", "shield")
                 ps_cmd = """
@@ -616,14 +913,18 @@ th {{ background: #263238; color: white; }}
                     errors="replace",
                     startupinfo=self._hidden_startupinfo(),
                 )
-                startup_files = [p.strip() for p in res.stdout.splitlines() if p.strip() and os.path.isfile(p.strip()) and not self.is_excluded(p.strip())]
+                startup_files = [
+                    p.strip()
+                    for p in res.stdout.splitlines()
+                    if p.strip() and os.path.isfile(p.strip()) and not self.is_excluded(p.strip())
+                ]
                 self.log(f"[STARTUP SCAN] Found {len(startup_files)} startup executable items.", "shield")
 
                 threats = 0
                 for exe_path in startup_files:
-                    if not self.is_busy:
+                    if self._is_stop_requested():
                         break
-                    self.stats["total_scanned"] += 1
+                    self._increment_scanned(1)
                     scan_res = subprocess.run(
                         [self.config["clamscan_path"], "--no-summary", exe_path],
                         stdout=subprocess.PIPE,
@@ -652,20 +953,24 @@ th {{ background: #263238; color: white; }}
             except Exception as e:
                 self.log(f"[STARTUP ERROR] {e}", "threat")
             finally:
-                self.is_busy = False
+                self._end_task()
 
         threading.Thread(target=task, daemon=True).start()
 
     def run_freshclam(self):
-        if self.is_busy:
+        fresh_path = str(self.config.get("freshclam_path", "")).strip()
+        if not fresh_path or (not os.path.isfile(fresh_path) and not shutil.which(fresh_path)):
+            self.log(f"[ERROR] freshclam executable not found: {fresh_path}", "threat")
+            return
+        if not self._begin_task():
             self.log("[BUSY] Engine is busy.", "threat")
             return
 
         def task():
-            self.is_busy = True
+            proc = None
             try:
                 self.log("\n[UPDATE] Updating definitions via freshclam...", "shield")
-                self.process = subprocess.Popen(
+                proc = subprocess.Popen(
                     [self.config["freshclam_path"]],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -674,35 +979,47 @@ th {{ background: #263238; color: white; }}
                     errors="replace",
                     startupinfo=self._hidden_startupinfo(),
                 )
-                for raw in self.process.stdout:
-                    if raw.strip():
-                        self.log(raw.strip())
-                self.process.wait()
-                self.stats["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                self.log(f"[UPDATE] Finished with exit code: {self.process.returncode}", "ok")
+                self._set_active_process(proc)
+                if proc.stdout is not None:
+                    for raw in proc.stdout:
+                        if self._is_stop_requested():
+                            break
+                        if raw.strip():
+                            self.log(raw.strip())
+                proc.wait()
+                with self._state_lock:
+                    self.stats["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    self._save_persistent_state()
+                self.log(f"[UPDATE] Finished with exit code: {proc.returncode}", "ok")
             except Exception as e:
                 self.log(f"[ERROR] freshclam failed: {e}", "threat")
             finally:
-                self.is_busy = False
-                self.process = None
+                self._clear_active_process(proc)
+                self._end_task()
 
         threading.Thread(target=task, daemon=True).start()
 
     def stop_active_process(self):
-        if self.process and self.is_busy:
+        with self._proc_lock:
+            self._stop_requested = True
+            proc = self.process
+            busy = self.is_busy
+        if proc and busy:
             try:
-                self.process.terminate()
+                if proc.poll() is None:
+                    proc.terminate()
                 self.log("[STOPPED] Process terminated.", "threat")
             except Exception as e:
                 self.log(f"[ERROR] {e}", "threat")
 
     def scan_running_processes(self, auto_quarantine=False, on_complete=None):
-        if self.is_busy:
+        if not self._has_valid_clamscan():
+            return
+        if not self._begin_task():
             self.log("[BUSY] Another scan is running.", "threat")
             return
 
         def task():
-            self.is_busy = True
             try:
                 self.log("\n[MEMORY SCAN] Enumerating active processes...", "shield")
                 ps_cmd = "Get-Process | Where-Object {$_.Path -ne $null} | Select-Object -ExpandProperty Path -Unique"
@@ -715,14 +1032,18 @@ th {{ background: #263238; color: white; }}
                     errors="replace",
                     startupinfo=self._hidden_startupinfo(),
                 )
-                exe_paths = [p.strip() for p in res.stdout.splitlines() if p.strip() and os.path.isfile(p.strip()) and not self.is_excluded(p.strip())]
+                exe_paths = [
+                    p.strip()
+                    for p in res.stdout.splitlines()
+                    if p.strip() and os.path.isfile(p.strip()) and not self.is_excluded(p.strip())
+                ]
                 self.log(f"[MEMORY SCAN] Inspecting {len(exe_paths)} unique executables...", "shield")
 
                 threats = 0
                 for exe_path in exe_paths:
-                    if not self.is_busy:
+                    if self._is_stop_requested():
                         break
-                    self.stats["total_scanned"] += 1
+                    self._increment_scanned(1)
                     scan_res = subprocess.run(
                         [self.config["clamscan_path"], "--no-summary", exe_path],
                         stdout=subprocess.PIPE,
@@ -749,22 +1070,33 @@ th {{ background: #263238; color: white; }}
             except Exception as e:
                 self.log(f"[MEMORY ERROR] {e}", "threat")
             finally:
-                self.is_busy = False
+                self._end_task()
 
         threading.Thread(target=task, daemon=True).start()
 
     def check_virustotal(self, file_path, on_result=None):
-        api_key = self.config.get("vt_api_key", "").strip()
+        api_key = str(self.config.get("vt_api_key", "")).strip()
         if not api_key:
             self.log("[VT ERROR] API Key not set in Settings.", "threat")
             if on_result:
                 on_result(False, "VirusTotal API Key is not set in Settings.")
             return
 
+        if not file_path or not os.path.isfile(file_path):
+            self.log(f"[VT ERROR] Target file does not exist: {file_path}", "threat")
+            if on_result:
+                on_result(False, "Target file does not exist or is not a valid file.")
+            return
+
         def task():
             try:
                 self.log(f"\n[VT] Hashing {os.path.basename(file_path)}...", "vt")
                 sha256 = self.get_file_sha256(file_path)
+                if not sha256:
+                    self.log("[VT ERROR] Failed to compute SHA-256 hash.", "threat")
+                    if on_result:
+                        on_result(False, "Failed to compute SHA-256 hash for file.")
+                    return
 
                 url = f"https://www.virustotal.com/api/v3/files/{sha256}"
                 req = urllib.request.Request(url, headers={"x-apikey": api_key})
@@ -801,14 +1133,40 @@ th {{ background: #263238; color: white; }}
     def start_realtime(self, watch_dir, auto_quarantine=True):
         if self.realtime_active:
             return
+        targets = []
+        if isinstance(watch_dir, (list, tuple)):
+            targets.extend(watch_dir)
+        elif watch_dir:
+            targets.append(watch_dir)
+
+        cfg_targets = self.config.get("shield_targets")
+        if isinstance(cfg_targets, list):
+            for t in cfg_targets:
+                if t and t not in targets:
+                    targets.append(t)
+
+        valid_dirs = [os.path.abspath(d) for d in targets if d and os.path.isdir(d)]
+        if not valid_dirs:
+            return
+
         self.realtime_active = True
         self.rt_auto_quarantine = auto_quarantine
-        self.watcher = WindowsFolderWatcher(watch_dir, self.realtime_queue.put, self.is_excluded)
-        self.watcher.start()
-        self.log(f"[SHIELD ON] Guarding: {watch_dir}", "shield")
+        self.watchers = []
+        for d in valid_dirs:
+            w = WindowsFolderWatcher(d, self.realtime_queue.put, self.is_excluded)
+            w.start()
+            self.watchers.append(w)
+        self.watcher = self.watchers[0] if self.watchers else None
+        self.log(f"[SHIELD ON] Guarding: {', '.join(valid_dirs)}", "shield")
 
     def stop_realtime(self):
         self.realtime_active = False
+        for w in getattr(self, "watchers", []):
+            try:
+                w.stop()
+            except Exception:
+                pass
+        self.watchers = []
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
@@ -817,10 +1175,12 @@ th {{ background: #263238; color: white; }}
     def _realtime_worker(self):
         while True:
             filepath = self.realtime_queue.get()
-            if not self.realtime_active or not os.path.isfile(filepath) or self.is_excluded(filepath):
+            if not self.realtime_active or not filepath or not os.path.isfile(filepath) or self.is_excluded(filepath):
                 continue
             time.sleep(0.6)
             if not os.path.isfile(filepath):
+                continue
+            if not self._has_valid_clamscan():
                 continue
 
             try:
@@ -833,7 +1193,7 @@ th {{ background: #263238; color: white; }}
                     errors="replace",
                     startupinfo=self._hidden_startupinfo(),
                 )
-                self.stats["total_scanned"] += 1
+                self._increment_scanned(1)
                 out = res.stdout.strip()
                 if "FOUND" in out:
                     sig = out.rsplit(":", 1)[-1].replace("FOUND", "").strip()
